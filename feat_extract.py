@@ -6,12 +6,11 @@
 #
 
 """
-
+Filter, crop and extract features from PET and CT scans in NRRD format.
 """
 
 
 # TODO:
-# Convert images and masks to NRRD format.
 # Filter and crop images (pyRadiomics?).
 # Extract features from images (pyRadiomics?).
 

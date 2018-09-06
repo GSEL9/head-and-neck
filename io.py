@@ -6,7 +6,7 @@
 #
 
 """
-Convert PET and CT scans from MATLAB to NRRD format including the ROI mask.
+Read PET and CT scans in MATLAB format and write to NRRD format.
 """
 
 
@@ -19,10 +19,10 @@ import scipy.io as io
 
 
 # TODO:
+# Do this in parallel for quick conversion.
 # Read PET and CT images in MATLAB format.
 # Write image and mask to NRRD format.
 
 # QUESTION:
-# Difference prep PET/CT?
-# Do this process in parallel with feat extract?
-# Same mask to PET and CT?
+# Difference prep/mask PET/CT?
+# Only need to convert images once.
