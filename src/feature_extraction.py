@@ -66,6 +66,7 @@ def initiate_logging(path_to_file):
     return None
 
 
+# NOTE: To utils.
 def _setup_tempdir(root=None, tempdir=None):
     # Returns path and sets up directory if necessary.
 
@@ -73,7 +74,7 @@ def _setup_tempdir(root=None, tempdir=None):
         root = os.getcwd()
 
     if tempdir is None:
-        tempdir = 'pyrad_temp'
+        tempdir = 'feature_extraction_tmp'
 
     path_tempdir = os.path.join(root, tempdir)
     if not os.path.isdir(path_tempdir):
@@ -82,6 +83,7 @@ def _setup_tempdir(root=None, tempdir=None):
     return path_tempdir
 
 
+# NOTE: To utils.
 def _teardown_tempdir(path_to_dir):
     # Removes directory even if not empty.
 
@@ -156,13 +158,13 @@ def extract_feature(param_file, case, path_tempdir):
     return feature_tensor
 
 
-
 if __name__ == '__main__':
     # TODO: Setup logger.
     # TODO: Checking that path to param file exists.
     # TODO: Clarify meaning of settings params in extraction params file.
 
     import ioutil
+    import postprep
 
     path_ct_dir = './../../data/images/stacks_ct/cropped_ct'
     path_pet_dir = './../../data/images/stacks_pet/cropped_pet'
@@ -171,17 +173,27 @@ if __name__ == '__main__':
     path_ct_features = './../../data/images/features_ct/raw_features1.csv'
     path_pet_features = './../../data/images/features_pet/raw_features1.csv'
 
-    param_file = './../../data/images/extraction_settings/example.yaml'
+    param_file = './../../data/images/extraction_settings/ct_extract_settings1.yaml'
 
     # Ensure the entire extraction is handled on 1 thread
     sitk.ProcessObject_SetGlobalDefaultNumberOfThreads(1)
 
     samples = ioutil.read_samples(path_ct_dir, path_masks_dir)
-    results = feature_extraction(param_file, samples[:9])
+    # Extracting raw features.
+    results = feature_extraction(param_file, samples[:3])
+    # Writing raw features to disk.
     ioutil.write_features(path_ct_features, results)
-
-    #extractor = RadiomicsFeaturesExtractor(param_file)
-    #featureVector = extractor.execute(samples[4]['Image'], samples[4]['Mask'])
-    #num = 0
-    #for featureName in featureVector.keys():
-    #    print("Computed %s: %s" % (featureName, featureVector[featureName]))
+    # Reading raw features.
+    path_ct_features = './../../data/images/features_ct/raw_features1.csv'
+    drop_cols = [
+        'Image', 'Mask', 'Patient', 'Reader', 'label', 'general'
+    ]
+    # Processing raw features.
+    features = postprep.check_extracted_features(
+        path_ct_features, drop_cols=drop_cols
+    )
+    # Writing processed features to disk.
+    features.to_csv(
+        './../../data/images/features_ct/prep_features1.csv',
+        columns=features.columns
+    )
