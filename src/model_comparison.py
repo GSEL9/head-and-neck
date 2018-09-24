@@ -1,19 +1,37 @@
-# new_features = select_from_pool(feature_pool, to_retain)
+# -*- coding: utf-8 -*-
+#
+# model_comparison.py
+#
 
+"""
+Algorithm: model comparison
+1. for each model
+2.     for each random state
+           # Enter into nested cross val (\approx unbiased model preformance)
+3.         for each outer k-fold
+4.             best model, best features = inner k-folds (grid search CV)
+"""
+
+__author__ = 'Severin Langberg'
+__email__ = 'langberg91@gmail.com'
+
+
+import os
+import shutil
+import ioutil
 import logging
+import pathlib
 
 import numpy as np
+import pandas as pd
 
-from joblib import Parallel, delayed
-from scipy import stats
-from collections import Counter
-from collections import OrderedDict
 from datetime import datetime
+from collections import Counter, OrderedDict
+
 from sklearn.externals import joblib
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.model_selection import ParameterGrid
-
 
 from multiprocessing import cpu_count
 
@@ -21,7 +39,68 @@ from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import roc_auc_score
 
 
-# logger = logging.GetLogger('')
+EXP_RESULTS = 'model_comparison_tmp'
+
+
+class PathTracker:
+
+    def __init__(self, root=None):
+
+        if root is None:
+            self.root = os.getcwd()
+        else:
+            self.root = root
+
+        # NOTE:
+        self.path = None
+        self.prev_path = None
+
+    def dir_down(self, extension):
+
+        if self.prev_path is None:
+            self.prev_path = self.root
+        else:
+            self.prev_path = self.path
+
+        self.path = os.path.join(self.prev_path, extension)
+
+        return self
+
+    def dir_up(self, extension):
+
+        self.prev_path, _ = os.path.split(self.path)
+
+        self.dir_down(extension)
+
+        return self
+
+    def same_dir(self, extension):
+
+        self.path, _ = os.path.split(self.path)
+
+        self.dir_down(extension)
+
+        return self
+
+    def produce(self):
+
+        if not os.path.isdir(self.path):
+            os.makedirs(self.path)
+
+        return self
+
+    def reset_to_root(self):
+
+        self.path, self.prev_path = None, None
+
+        return self
+
+    def teardown(self):
+        """Removes directory even if not empty."""
+
+        shutil.rmtree(self.root)
+
+        return self
 
 
 def multi_intersect(arrays):
@@ -33,50 +112,69 @@ def multi_intersect(arrays):
     return list(matches)
 
 
-def model_comparison(*args, verbose=0, n_jobs=None, **kwargs):
-    # TEMP:
-    # AIM: Collecting repeated average performance data of optimal models.
+def write_comparison_results(path_to_file, results):
+    """Writes model copmarison results to CSV file."""
+
+    data = []
+    for name, experiments in results.items():
+
+        frame = pd.DataFrame([experiment for experiment in experiments])
+        frame.index = [name] * frame.shape[0]
+        data.append(frame)
+
+    output = pd.concat(data)
+    output.to_csv(path_to_file, sep=',')
+
+    return None
+
+
+def model_comparison(*args, verbose=2, n_jobs=None, **kwargs):
+    # Collecting repeated average performance data of optimal models.
     estimators, param_grids, X, y, random_states, n_splits = args
 
-    logger = logging.getLogger(__name__)
+    global EXP_RESULTS
+
+    #logger = logging.getLogger(__name__)
+    #logger.info('Model comparison')
+
+    path_tracker = PathTracker()
 
     # Set number of CPUs.
     if n_jobs is None:
         n_jobs = cpu_count() - 1 if cpu_count() > 1 else cpu_count()
 
-    comparison_results = {}
+    experiment, comparison_results = None, {}
     for name, estimator in estimators.items():
 
-        logger.info('Initiated model comparison with: `name`'.format(name))
-
-        if verbose:
-            print('Experiment initiated with: `{}`\n{}'.format(name, '_' * 40))
+        path_tracker.dir_down('{}/{}'.format(EXP_RESULTS, name)).produce()
 
         # Setup hyperparameter grid.
         hparam_grid = ParameterGrid(param_grids[name])
 
-        # Experimental results of model performance and selected feaures.
-        comparison_results[name] = Parallel(n_jobs=n_jobs, verbose=verbose)(
-            delayed(nested_cross_val)(
+        # Repeated experimental results.
+        comparison_results[estimator.__name__] = joblib.Parallel(
+            n_jobs=n_jobs, verbose=verbose
+        )(
+            joblib.delayed(nested_cross_val)(
                 X, y, estimator, hparam_grid, n_splits, random_state,
-                verbose=verbose
+                path_tracker, verbose=verbose
             ) for random_state in random_states
         )
+        path_tracker.reset_to_root()
 
-    return comparison_results
+    # Write results to disk.
+    ioutil.write_comparison_results(
+        './comparison_results.csv', comparison_results
+    )
+    # Remove temporary directory if process completed succesfully.
+    path_tracker.teardown()
+
+    return None
 
 
 def nested_cross_val(*args, verbose=1, **kwargs):
-    # TEMP:
-    # AIM: Collecting average performance data of optimal model.
-    X, y, estimator, hparam_grid, n_splits, random_state = args
-
-    logger = logging.getLogger(__name__)
-    logger.info('Initiated nested cross validation.')
-
-    if verbose > 0:
-        print('* Starting cross validation sequence {}'.format(random_state))
-        start_time = datetime.now()
+    # Collecting average performance data of optimal model.
+    X, y, estimator, hparam_grid, n_splits, random_state, path_tracker = args
 
     # Outer cross-validation loop.
     kfolds = StratifiedKFold(
@@ -106,14 +204,12 @@ def nested_cross_val(*args, verbose=1, **kwargs):
         )
         best_features.append(sel_features)
 
-    if verbose > 0:
-        delta_time = datetime.now() - start_time
-        print('* Nested cross validation complete in {}'.format(delta_time))
-        print('* Mean test score: {}\n'.format(np.mean(test_scores)))
+        # TODO:
+        # Write preliminary outer fold results.
 
     return {
-        'id': random_state,
-        'best_model': best_model,
+        'experiment_id': random_state,
+        'best_params': best_model.get_params(),
         'avg_test_score': np.mean(test_scores),
         'avg_train_score': np.mean(train_scores),
         'best_features': multi_intersect(best_features)
@@ -123,9 +219,6 @@ def nested_cross_val(*args, verbose=1, **kwargs):
 def grid_search(*args, **kwargs):
     # TEMP:
     estimator, hparam_grid, X, y, n_splits, random_state = args
-
-    logger = logging.getLogger(__name__)
-    logger.info('Initiated grid search.')
 
     best_score, best_model, best_features = 0.0, None, None
     for combo_num, hparams in enumerate(hparam_grid):
@@ -150,6 +243,11 @@ def grid_search(*args, **kwargs):
             train_scores.append(train_score), test_scores.append(test_score)
             sel_features.append(features)
 
+        # Write preliminary inner fold results.
+        # TODO:
+        #path_results_file = os.path.join(inner_X)
+        #ioutil.write_prelim_result(path_results_file, results)
+
         # Update globally improved score from hparam combo and feature subset.
         if np.mean(test_scores) > best_score:
             best_score = np.mean(test_scores)
@@ -164,6 +262,8 @@ def select_fit_predict(*args, **kwargs):
 
     # Z-scores.
     X_train_std, X_test_std = train_test_z_scores(X_train, X_test)
+
+    # NB: Ensure parallel feature sel. Save all selected features to disk.
 
     # Feature selection based on training set to avoid information leakage.
     concensus_support = np.arange(X_train.shape[1])
@@ -201,14 +301,13 @@ def train_test_z_scores(X_train, X_test):
 
 
 if __name__ == '__main__':
+    # TODO: Setup temporary directories:
+    # model_comparison_tmp
+    #   exp_X_round_Y (X=model name, Y=random_state)
+    #
+
     # NOTE: Use Elastic and RF because indicated with good performance in unbiased
     # studies?
-
-    # NB: The purpose of a nested CV is not to select the parameters, but to
-    # have an unbiased evaluation of what is the expected accuracy of your
-    # algorithms. Cross-validation is a technique for estimating the
-    # generalisation performance for a method of generating a model, rather
-    # than of the model itself.
 
     # NOTE: Dealing with class imbalance:
     # * Better to use ROC on imbalanced data sets
@@ -219,45 +318,11 @@ if __name__ == '__main__':
     #  function.
     # * Generate synthetic samples with SMOTE algorithm (p. 216).
 
-    # NOTE:
-    # Selecting features from training set only because should not use
-    # test data in any part of training procedure. Cannot let information
-    # about the full dataset leack into cross-validation to prevent
-    # overfitting. Thus, must re-select feaures in each cross-validation
-    # iteration.
-
-    # TODO: Parallelize for models only first. For each round of parallelizing
-    # obtains a list => nested parallelizing gives nested lists. PArallelizing
-    # models gives lists with results for each model.
-    # NOTE: Parallel
-    # https://zacharyst.com/2016/03/31/parallelize-a-multifunction-argument-in-python/
-
-    # NOTE: Nested CV
-    # https://stats.stackexchange.com/questions/136296/implementation-of-nested-cross-validation
-
-    # NOTE: Cross validation should always be the outer most loop
-    # in any machine learning algorithm. So, split the data into 5
-    # sets. For every set you choose as your test set (1/5), fit
-    # the model after doing a feature selection on the training set
-    # (4/5). Repeat this for all the CV folds - here you have 5 folds.
-    # Now once the CV procedure is complete, you have an estimate of
-    # your model's accuracy, which is a simple average of your
-    # individual CV fold's accuracy. As far as the final set of
-    # features for training the model on the complete set of data is
-    # concerned, do the following to select the final set of features:
-    # Each time you do a CV on a fold as outlined above, vote for
-    # the features that you selected in that particular fold. At the
-    # end of 5 fold CV, select a particular number of features that
-    # have the top votes. Use the above selected set of features to
-    # do one final procedure of feature selection and then train the
-    # model on the complete data (combined of all 5 folds) and move
-    # the model to production.
-
-    # TODO: Logging and type checking
-
     import feature_selection
 
     from sklearn.linear_model import LogisticRegression
+    from sklearn.linear_model import ElasticNet
+
     from sklearn.datasets import load_breast_cancer
     from sklearn.metrics import roc_auc_score
 
@@ -271,18 +336,20 @@ if __name__ == '__main__':
 
     # TEMP:
     n_splits = 2
-    random_states = np.arange(2)
+    random_states = np.arange(3)
 
     estimators = {
-        'logreg': LogisticRegression
+        'logreg': LogisticRegression,
+        'elnet': ElasticNet
     }
     param_grids = {
         'logreg': {
             'C': [0.001, 0.05, 0.1], 'fit_intercept': [True, False]
         },
+        'elnet': {
+            'alpha': [0.05, 0.1], 'l1_ratio':[0.1, 0.5]
+        }
     }
     results = model_comparison(
         estimators, param_grids, X, y, random_states, n_splits
     )
-
-    print(results)

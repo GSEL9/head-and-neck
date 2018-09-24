@@ -141,6 +141,22 @@ def write_prelim_result(path_to_file, feature_vector):
     return None
 
 
+def write_comparison_results(path_to_file, results):
+    """Writes model copmarison results to CSV file."""
+
+    data = []
+    for name, experiments in results.items():
+
+        frame = pd.DataFrame([experiment for experiment in experiments])
+        frame.index = [name] * frame.shape[0]
+        data.append(frame)
+
+    output = pd.concat(data)
+    output.to_csv(path_to_file, sep=',')
+
+    return None
+
+
 if __name__ == '__main__':
     # TODO: Clean up
 
