@@ -1,46 +1,17 @@
+import utils
 import numpy as np
 
 
-class FeatureRankings:
-    """Tracks feature rankings."""
+# TODO: Feature selection.
+def dummy(X_train, X_test, y_train):
 
-    def __init__(self, indices, labels=None):
+    # Z-scores.
+    X_train_std, X_test_std = utils.train_test_z_scores(X_train, X_test)
 
-        self.indices = np.array(indices, dtype=int)
-        self.labels = np.array(labels, dtype=object)
+    # Feature selection based on training set to avoid information leakage.
+    support = np.arange(X_train.shape[1])
 
-        # NOTE:
-        self.indicators
-
-    def update_votes(self, name, selected):
-        """Assign one wote to each selected feature."""
-
-        if self.votes is None:
-            self.votes = self.gen_schedule()
-
-        if name not in self.votes.keys():
-            self.votes[name] = {}
-
-        for key in selected:
-            self.votes[name][str(key)] += 1
-
-        return self
-
-    def update_rankings(self, selected):
-
-        if self.rankings is None:
-            self.rankings = self.gen_schedule()
-
-        for key, value in selected.items():
-            self.rankings[key] += value
-
-        return self
-
-    def gen_schedule(self):
-        """Returns an empty feature votes schedule."""
-
-        entries = [0] * np.size(self.indices)
-        return dict(zip(self.indices, entries))
+    return X_train_std[:, support], X_test_std[:, support], support
 
 
 if __name__ == '__main__':

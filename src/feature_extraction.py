@@ -108,7 +108,7 @@ def feature_extraction(param_file, samples, verbose=0, n_jobs=None):
 
     # Extract features.
     results = Parallel(n_jobs=n_jobs, verbose=verbose)(
-        delayed(extract_feature)(
+        delayed(_extract_features)(
             param_file, sample, path_tempdir
         ) for sample in samples
     )
@@ -118,7 +118,7 @@ def feature_extraction(param_file, samples, verbose=0, n_jobs=None):
     return results
 
 
-def extract_feature(param_file, case, path_tempdir):
+def _extract_features(param_file, case, path_tempdir):
 
     feature_tensor = OrderedDict(case)
     # Monitor extraction procedure.
