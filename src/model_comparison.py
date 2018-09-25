@@ -32,7 +32,10 @@ TMP_RESULTS = 'tmp_model_comparison'
 
 def model_comparison(*args, verbose=0, score_func=None, n_jobs=None, **kwargs):
     # Collecting repeated average performance data of optimal models.
-    estimators, param_grids, X, y, random_states, n_splits = args
+    (
+        selection_scheme, estimators, param_grids, X, y, random_states,
+        n_splits
+    ) = args
 
     global TMP_RESULTS
 
@@ -53,7 +56,7 @@ def model_comparison(*args, verbose=0, score_func=None, n_jobs=None, **kwargs):
         comparison_results[estimator.__name__] = joblib.Parallel(
             n_jobs=n_jobs, verbose=verbose
         )(
-            joblib.delayed(model_selection.nested_cross_val)(
+            joblib.delayed(selection_scheme)(
                 X, y, estimator, hparam_grid, n_splits, random_state,
                 verbose=verbose, score_func=score_func
             ) for random_state in random_states
@@ -78,7 +81,7 @@ if __name__ == '__main__':
     # * Display model performance as function of num selected features.
 
     from sklearn.linear_model import LogisticRegression
-    from sklearn.linear_model import ElasticNet
+    from sklearn.ensemble import RandomForestClassifier
 
     from sklearn.datasets import load_breast_cancer
     from sklearn.metrics import roc_auc_score
@@ -88,26 +91,31 @@ if __name__ == '__main__':
     y = cancer.target
     X = cancer.data
 
-    # SETUP
-    # NOTE: Number of CV folds
-    n_splits = 2
+    # NOTE: Number of CV folds.
+    # * Num outer train samples = (n_splits - 1) * 200 / n_splits
+    # * Num outer test sapmles = 200 / n_splits
+    # * Num inner train samples = (n_splits - 1) * Num outer train samples / n_splits
+    # * Num inner test samples = Num outer train samples / n_splits
+    n_splits = 5
 
     # NOTE: Number of experiments
     random_states = np.arange(3)
 
     estimators = {
-        'logreg': LogisticRegression,
-        'elnet': ElasticNet
+        'rforest': RandomForestClassifier,
+        'logreg': LogisticRegression
     }
     param_grids = {
         'logreg': {
             'C': [0.001, 0.05, 0.1]
         },
-        'elnet': {
-            'alpha': [0.05, 0.1], 'l1_ratio':[0.1, 0.5]
+        'rforest': {
+            'n_estimators': [10, 15]
         }
     }
+    #selection_scheme = model_selection.nested_cross_val
+    selection_scheme = model_selection.bootstrap_point632plus
     results = model_comparison(
-        estimators, param_grids, X, y, random_states, n_splits,
-        score_func=roc_auc_score
+        selection_scheme, estimators, param_grids, X, y,
+        random_states, n_splits, score_func=roc_auc_score
     )
