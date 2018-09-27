@@ -19,8 +19,8 @@ threading.current_thread().name = 'Main'
 
 
 class InfoFilter(logging.Filter):
-    # Define filter that allows messages from specified filter and level INFO and up, and level WARNING and up from other
-    # loggers.
+    # Define filter that allows messages from specified filter and level INFO
+    # and up, and level WARNING and up from other loggers.
 
     def __init__(self, name):
 
@@ -66,7 +66,6 @@ def initiate_logging(path_to_file):
     return None
 
 
-# NOTE: To utils.
 def _setup_tempdir(root=None, tempdir=None):
     # Returns path and sets up directory if necessary.
 
@@ -83,7 +82,6 @@ def _setup_tempdir(root=None, tempdir=None):
     return path_tempdir
 
 
-# NOTE: To utils.
 def _teardown_tempdir(path_to_dir):
     # Removes directory even if not empty.
 
@@ -178,20 +176,25 @@ if __name__ == '__main__':
     # Ensure the entire extraction is handled on 1 thread
     sitk.ProcessObject_SetGlobalDefaultNumberOfThreads(1)
 
-    samples = ioutil.read_samples(path_ct_dir, path_masks_dir)
+    paths_to_samples = ioutil.sample_paths(path_ct_dir, path_masks_dir)
+
     # Extracting raw features.
-    results = feature_extraction(param_file, samples[:3])
+    results = feature_extraction(param_file, paths_to_samples[:3])
+
     # Writing raw features to disk.
     ioutil.write_features(path_ct_features, results)
+
     # Reading raw features.
     path_ct_features = './../../data/images/features_ct/raw_features1.csv'
     drop_cols = [
         'Image', 'Mask', 'Patient', 'Reader', 'label', 'general'
     ]
+
     # Processing raw features.
     features = postprep.check_extracted_features(
         path_ct_features, drop_cols=drop_cols
     )
+
     # Writing processed features to disk.
     features.to_csv(
         './../../data/images/features_ct/prep_features1.csv',

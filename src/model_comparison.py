@@ -16,6 +16,7 @@ import ioutil
 import shutil
 import logging
 import model_selection
+import feature_selection
 
 import numpy as np
 import pandas as pd
@@ -27,45 +28,41 @@ from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import ParameterGrid
 
 
-TMP_RESULTS = 'tmp_model_comparison'
+PATH_TMP_RESULTS = 'tmp_model_comparison'
 
 
 def model_comparison(*args, verbose=0, score_func=None, n_jobs=None, **kwargs):
     # Collecting repeated average performance data of optimal models.
     (
-        selection_scheme, estimators, param_grids, X, y, random_states,
-        n_splits
+        comparison_scheme, estimators, selectors, param_grids, X, y,
+        random_states, n_splits
     ) = args
 
-    global TMP_RESULTS
-
-    #logger = logging.getLogger(__name__)
-    #logger.info('Model comparison')
+    global PATH_TMP_RESULTS
 
     # Set number of CPUs.
     if n_jobs is None:
         n_jobs = cpu_count() - 1 if cpu_count() > 1 else cpu_count()
 
-    experiment, comparison_results = None, {}
+    results = []
     for name, estimator in estimators.items():
 
         # Setup hyperparameter grid.
         hparam_grid = ParameterGrid(param_grids[name])
+        for label, selector in selectors.items():
 
-        # Repeated experimental results.
-        comparison_results[estimator.__name__] = joblib.Parallel(
-            n_jobs=n_jobs, verbose=verbose
-        )(
-            joblib.delayed(selection_scheme)(
-                X, y, estimator, hparam_grid, n_splits, random_state,
-                verbose=verbose, score_func=score_func
-            ) for random_state in random_states
+            # Repeated experimental results.
+            results.extend(
+                joblib.Parallel(
+                    n_jobs=n_jobs, verbose=verbose
+                )(
+                    joblib.delayed(comparison_scheme)(
+                    X, y, estimator, selector, hparam_grid, selector, n_splits,
+                    random_state, verbose=verbose, score_func=score_func
+                ) for random_state in random_states
+            )
         )
-    # Write results to disk.
-    ioutil.write_comparison_results(
-        './comparison_results.csv', comparison_results
-    )
-    return comparison_results
+    return results
 
 
 if __name__ == '__main__':
@@ -113,9 +110,19 @@ if __name__ == '__main__':
             'n_estimators': [10, 15]
         }
     }
+    selectors = {
+        'dummy': feature_selection.dummy
+    }
     #selection_scheme = model_selection.nested_cross_val
     selection_scheme = model_selection.bootstrap_point632plus
     results = model_comparison(
-        selection_scheme, estimators, param_grids, X, y,
+        selection_scheme, estimators, selectors, param_grids, X, y,
         random_states, n_splits, score_func=roc_auc_score
     )
+    ioutil.write_comparison_results(
+        './../../data/results/model_comparison/model_comparison_results.csv',
+        results
+    )
+    # Create final heat map:
+    # * Group results according to classifier + feature selector
+    # * Average scores across all random states

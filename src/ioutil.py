@@ -7,6 +7,9 @@ import nrrd
 import shutil
 
 import pandas as pd
+import scipy.io as sio
+
+from joblib import Parallel, delayed
 
 from collections import OrderedDict
 
@@ -36,6 +39,9 @@ def natural_keys(text):
 def relative_paths(path_to_dir, sorted=True, target_format=None):
     # Return a list of relative paths to all files in directory.
 
+    if not os.path.isdir(path_to_dir):
+        raise RuntimeError('Invalid path {}'.format(path_to_dir))
+
     file_names = os.listdir(path_to_dir)
 
     rel_paths = []
@@ -52,10 +58,13 @@ def relative_paths(path_to_dir, sorted=True, target_format=None):
     return rel_paths
 
 
-def read_matlab():
+def read_matlab(path_to_dir):
 
-    # In case need to convert raw data files.
-    pass
+    rel_paths = relative_paths(path_to_dir, target_format='mat')
+    images = Parallel(n_jobs=n_jobs, verbose=verbose)(
+        sio.loadmat(rel_path) for rel_path in rel_paths
+    )
+    return images
 
 
 def read_nrrd():
@@ -64,16 +73,20 @@ def read_nrrd():
     pass
 
 
-def write_nrrd():
+def write_nrrd(path_to_dir, images):
 
-    # In case need to convert raw data files.
-    pass
+    Parallel(n_jobs=n_jobs, verbose=verbose)(
+        nrrd.write(image) for image in images
+    )
+    return None
 
 
-def matlab_to_nrrd():
+def matlab_to_nrrd(path_mat_dir, path_nrrd_dir):
 
-    # In case need to convert raw data files.
-    pass
+    mat_images = read_matlab(path_mat_dir)
+    write_nrrd(path_nrrd_dir, mat_images)
+
+    return None
 
 
 # Assumes the input CSV has at least 2 columns: "Image" and "Mask"
@@ -81,7 +94,7 @@ def matlab_to_nrrd():
 # Additionally, this script uses 2 additonal Columns: "Patient" and "Reader"
 # These columns indicate the name of the patient (i.e. the image), the reader (i.e. the segmentation), if
 # these columns are omitted, a value is automatically generated ("Patient" = "Pt <Pt_index>", "Reader" = "N/A")
-def read_samples(path_image_dir, path_mask_dir, target_format='nrrd'):
+def sample_paths(path_to_dir, path_mask_dir, target_format='nrrd'):
     """Generate dictionary of locations to image and corresponding mask."""
 
     sample_paths = relative_paths(
@@ -145,14 +158,20 @@ def write_comparison_results(path_to_file, results):
     """Writes model copmarison results to CSV file."""
 
     data = []
-    for name, experiments in results.items():
+    for result in results:
 
-        frame = pd.DataFrame([experiment for experiment in experiments])
-        frame.index = [name] * frame.shape[0]
-        data.append(frame)
+        frame = pd.DataFrame(results)
 
-    output = pd.concat(data)
-    output.to_csv(path_to_file, sep=',')
+        #frame = pd.DataFrame([experiment for experiment in experiments])
+        #frame.index = [name] * frame.shape[0]
+        #data.append(frame)
+
+    data = pd.DataFrame([result for result in results])
+    data.index = data.experiment_id
+    print(data)
+
+    #output = pd.concat(data)
+    #output.to_csv(path_to_file, sep=',')
 
     return None
 
@@ -164,5 +183,9 @@ if __name__ == '__main__':
     path_pet_dir = './../../data/images/stacks_pet/cropped_pet'
     path_masks_dir = './../../data/images/masks/prep_masks'
 
-    samples = read_samples(path_ct_dir, path_masks_dir)
-    print(samples[0].keys())
+    path_raw_ct_dir = './../../data/images/stacks_ct/raw_ct'
+
+    #samples = read_samples(path_ct_dir, path_masks_dir)
+    #print(samples[0].keys())
+
+    read_matlab(path_raw_ct_dir)

@@ -64,37 +64,33 @@ class BootstrapOutOfBag:
             train_idx = rand_gen.choice(
                 sample_indicators, size=nrows, replace=True
             )
-            test_idx = np.array(list(set(sample_indicators) - set(train_idx)))
+            test_idx = np.array(
+                list(set(sample_indicators) - set(train_idx)), dtype=int
+            )
             yield train_idx, test_idx
 
 
 @jit
-def point632p_score(weight, train_score, test_score):
+def point632p_score(weight, train_error, test_error):
 
-    return weight * train_score + (1 - weight) * test_score
+    return (1 - weight) * train_error + weight * test_error
 
 
 @jit
 def omega(rel_overfit_rate):
 
-    return 0.632 / (1 - 0.632) * rel_overfit_rate
+    return 0.632 / (1 - (0.368 * rel_overfit_rate))
 
 
 @jit
-def rel_overfit_rate(train_score, test_score, gamma):
+def rel_overfit_rate(train_error, test_error, gamma):
 
-    return (test_score - train_score) / (gamma - 1 + train_score)
+    return (test_error - train_error) / (gamma - train_error)
 
 
 def no_info_rate(y_true, y_pred):
 
-    true_unique, true_counts = np.unique(y_true, return_counts=True)
-    pred_unique, pred_counts = np.unique(y_pred, return_counts=True)
+    # NB: Only applicable to a dichotomous classification problem.
+    p_one, q_one = np.sum(y_true == 1), np.sum(y_pred == 1)
 
-    # Sanity check.
-    #assert np.all(pred_unique in true_unique)
-
-    true_proportions = true_counts / np.size(y_true)
-    pred_proportions = 1 - (pred_counts / np.size(y_true))
-
-    return np.sum(true_proportions * pred_proportions)
+    return p_one * (1 - q_one) + (1 - p_one) * q_one
