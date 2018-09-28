@@ -116,6 +116,9 @@ def sample_paths(path_image_dir, path_mask_dir, target_format='nrrd'):
 
 def write_features(path_to_file, results):
 
+    #frame = pd.DataFrame([result for result in results])
+    #frame.to_csv(path_to_file)
+
     with open(path_to_file, mode='w') as outfile:
         writer = csv.DictWriter(
             outfile,
@@ -127,12 +130,15 @@ def write_features(path_to_file, results):
         writer.writeheader()
         writer.writerows(results)
 
+
     return None
 
 
 def read_prelim_result(path_to_file):
 
-    results = pd.read_csv(path_to_file).to_dict()
+    with open(path_to_file, mode='r'):
+
+        results = pd.read_csv(path_to_file).to_dict()
 
     return results
 

@@ -14,44 +14,41 @@ from mlxtend.feature_selection import SequentialFeatureSelector
 
 
 # NOTE: Filter methods.
-def variance_threshold(**kwargs):
+def variance_threshold(X_train, X_test, y_train, alpha=0.05):
     """A wrapper of scikit-learn VarianceThreshold."""
 
     # Z-scores.
-    X_train_std, X_test_std = utils.train_test_z_scores(
-        kwargs['X_train'], kwargs['X_test']
-    )
-    selector = feature_selection.VarianceThreshold(threshold=kwargs['alpha'])
-    selector.fit(X_train_std, kwargs['y_train'])
+    X_train_std, X_test_std = utils.train_test_z_scores(X_train, X_test)
+
+    selector = feature_selection.VarianceThreshold(threshold=alpha)
+    selector.fit(X_train_std, y_train)
     support = selector.get_support(indices=True)
 
     return X_train_std[:, support], X_test_std[:, support], support
 
 
-def chi2(**kwargs):
+def chi2(X_train, X_test, y_train, alpha=0.05):
     """A wrapper of scikit-learn chi2."""
 
     # NB: Cannot handle negative features.
 
     # Z-scores.
-    X_train_std, X_test_std = utils.train_test_z_scores(
-        kwargs['X_train'], kwargs['X_test']
-    )
+    X_train_std, X_test_std = utils.train_test_z_scores(X_train, X_test)
+
     _, pvalues = feature_selection.chi2(X_train_std, y_train)
-    support = np.where(pvalues <= threshold)
+    support = np.where(pvalues <= alpha)
 
     return X_train_std[:, support], X_test_std[:, support], support
 
 
-def anova_fvalue(**kwargs):
+def anova_fvalue(X_train, X_test, y_train, alpha=0.05):
     """A wrapper of scikit-learn ANOVA F-value."""
 
     # Z-scores.
-    X_train_std, X_test_std = utils.train_test_z_scores(
-        kwargs['X_train'], kwargs['X_test']
-    )
+    X_train_std, X_test_std = utils.train_test_z_scores(X_train, X_test)
+
     _, pvalues = feature_selection.f_classif(X_train_std, y_train)
-    support = np.where(pvalues <= alpha)
+    support = np.squeeze(np.where(pvalues <= alpha))
 
     return X_train_std[:, support], X_test_std[:, support], support
 
@@ -63,7 +60,7 @@ def false_positive_rates(X_train, X_test, y_train, scorer=None, alpha=0.05):
     # Z-scores.
     X_train_std, X_test_std = utils.train_test_z_scores(X_train, X_test)
 
-    selector = feature_selection.SelectFpr(scorer, alpha=alpha)
+    selector = feature_selection.SelectFpr(score_func=scorer, alpha=alpha)
     selector.fit(X_train_std, y_train)
     support = np.where(selector.pvalues_ <= alpha)
 
@@ -90,7 +87,7 @@ def relieff(X_train, X_test, y_train, n_neighbors=100, k=10):
     return X_train_std[:, support], X_test_std[:, support], support
 
 
-def sequential_forward_floating(**kwargs):
+def sequential_forward_floating(X_train, X_test, y_train, **kwargs):
     """A wrapper of mlxtend Sequential Forward Floating Selection algorithm."""
 
     scorer = make_scorer(kwargs['scoring'])

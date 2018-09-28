@@ -99,7 +99,7 @@ if __name__ == '__main__':
 
     from sklearn.linear_model import LogisticRegression
     from sklearn.ensemble import RandomForestClassifier
-
+    from sklearn.feature_selection import VarianceThreshold
     from sklearn.datasets import load_breast_cancer
     from sklearn.metrics import roc_auc_score
 
@@ -127,12 +127,22 @@ if __name__ == '__main__':
         'rforest': {'n_estimators': [10, 15]}
     }
     selectors = {
+        'false_positive_rates': feature_selection.false_positive_rates,
         'relieff': feature_selection.relieff,
+        'var_thresh': feature_selection.variance_threshold,
+        'anovaf': feature_selection.anova_fvalue,
     }
     selector_params = {
-        'relieff': {'k': 10, 'n_neighbors': 100}
+        # ERROR: The score function should be a callable
+        'false_positive_rates': {
+            'scorer': RandomForestClassifier,
+        },
+        'relieff': {'k': 10, 'n_neighbors': 100},
+        'var_thresh': {'alpha': 0.05},
+        'anovaf': {'alpha': 0.05},
     }
     selection_scheme = model_selection.nested_cross_val
+    # TODO: Refactor selectino scehem
     #selection_scheme = model_selection.bootstrap_point632plus
     results = model_comparison(
         selection_scheme, X, y, estimators, estimator_params, selectors,

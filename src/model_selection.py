@@ -101,7 +101,6 @@ def grid_search_cv(*args, score_func=None, n_jobs=1, verbose=0, **kwargs):
 
             X_train, X_test = X[train_idx], X[test_idx]
             y_train, y_test = y[train_idx], y[test_idx]
-
             # NOTE: Standardizing in feature sel function.
             X_train_sub, X_test_sub, support = selector.func(
                 X_train, X_test, y_train, **selector.params

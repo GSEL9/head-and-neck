@@ -156,6 +156,7 @@ if __name__ == '__main__':
 
     paths_to_samples = ioutil.sample_paths(path_ct_dir, path_masks_dir)
 
+    # ERROR: Proper reading prelim results.
     # Extracting raw features.
     results = feature_extraction(param_file, paths_to_samples[:20])
 
@@ -163,18 +164,17 @@ if __name__ == '__main__':
     ioutil.write_features(path_ct_features, results)
 
     # Reading raw features.
-    path_ct_features = './../../data/images/features_ct/raw_features1.csv'
-    drop_cols = [
-        'Image', 'Mask', 'Patient', 'Reader', 'label', 'general'
-    ]
+    #path_ct_features = './../../data/images/features_ct/raw_features1.csv'
+    #drop_cols = [
+    #    'Image', 'Mask', 'Patient', 'Reader', 'label', 'general'
+    #]
     # Processing raw features.
-    features = postprep.check_extracted_features(
-        path_ct_features, drop_cols=drop_cols
-    )
+    #features = postprep.check_extracted_features(
+    #    path_ct_features, drop_cols=drop_cols
+    #)
     # Writing processed features to disk.
-    features.to_csv(
-        './../../data/images/features_ct/prep_features1.csv',
-        columns=features.columns
-    )
+    #ioutil.write_features(
+    #    './../../data/images/features_ct/prep_features1.csv', features
+    #)
     # Remove temporary directory if process completed succesfully.
     #ioutil.teardown_tempdir(TMP_EXTRACTION_DIR)
