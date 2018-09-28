@@ -40,6 +40,13 @@ from sklearn import feature_selection
 
 
 
+def variance_threshold():
+    """A wrapper of scikit-learn VarianceThreshold."""
+
+    pass
+
+
+
 def feature_evluation():
 
     # Use /Drop-out feature importanceFeature importance permutation on subset

@@ -28,7 +28,7 @@ from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import ParameterGrid
 
 
-PATH_TMP_RESULTS = 'tmp_model_comparison'
+TMP_RESULTS_DIR = 'tmp_model_comparison'
 
 
 def model_comparison(*args, verbose=0, score_func=None, n_jobs=None, **kwargs):
@@ -38,7 +38,10 @@ def model_comparison(*args, verbose=0, score_func=None, n_jobs=None, **kwargs):
         random_states, n_splits
     ) = args
 
-    global PATH_TMP_RESULTS
+    global TMP_RESULTS_DIR
+
+    # Setup temporary directory.
+    path_tempdir = utils._setup_tempdir(TMP_RESULTS_DIR)
 
     # Set number of CPUs.
     if n_jobs is None:

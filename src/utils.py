@@ -94,3 +94,24 @@ def no_info_rate(y_true, y_pred):
     p_one, q_one = np.sum(y_true == 1), np.sum(y_pred == 1)
 
     return p_one * (1 - q_one) + (1 - p_one) * q_one
+
+
+def setup_tempdir(tempdir, oot=None):
+    # Returns path and sets up directory if necessary.
+
+    if root is None:
+        root = os.getcwd()
+
+    path_tempdir = os.path.join(root, tempdir)
+    if not os.path.isdir(path_tempdir):
+        os.mkdir(path_tempdir)
+
+    return path_tempdir
+
+
+def teardown_tempdir(path_to_dir):
+    # Removes directory even if not empty.
+
+    shutil.rmtree(path_to_dir)
+
+    return None

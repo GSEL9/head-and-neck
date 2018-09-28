@@ -17,6 +17,8 @@ from radiomics.featureextractor import RadiomicsFeaturesExtractor
 
 threading.current_thread().name = 'Main'
 
+TMP_EXTRACTION_DIR = 'tmp_feature_extraction'
+
 
 class InfoFilter(logging.Filter):
     # Define filter that allows messages from specified filter and level INFO
@@ -66,31 +68,9 @@ def initiate_logging(path_to_file):
     return None
 
 
-def _setup_tempdir(root=None, tempdir=None):
-    # Returns path and sets up directory if necessary.
-
-    if root is None:
-        root = os.getcwd()
-
-    if tempdir is None:
-        tempdir = 'feature_extraction_tmp'
-
-    path_tempdir = os.path.join(root, tempdir)
-    if not os.path.isdir(path_tempdir):
-        os.mkdir(path_tempdir)
-
-    return path_tempdir
-
-
-def _teardown_tempdir(path_to_dir):
-    # Removes directory even if not empty.
-
-    shutil.rmtree(path_to_dir)
-
-    return None
-
-
 def feature_extraction(param_file, samples, verbose=0, n_jobs=None):
+
+    global TMP_EXTRACTION_DIR
 
     initiate_logging(os.path.join(os.getcwd(), 'extraction_log.txt'))
 
@@ -98,7 +78,7 @@ def feature_extraction(param_file, samples, verbose=0, n_jobs=None):
     logger.info('pyradiomics version: {}'.format(radiomics.__version__))
 
     # Setup temporary directory.
-    path_tempdir = _setup_tempdir()
+    path_tempdir = utils._setup_tempdir(TMP_EXTRACTION_DIR)
 
     # Set number of CPUs.
     if n_jobs is None:
@@ -111,7 +91,7 @@ def feature_extraction(param_file, samples, verbose=0, n_jobs=None):
         ) for sample in samples
     )
     # Remove temporary directory if process completed succesfully.
-    _teardown_tempdir(path_tempdir)
+    utils._teardown_tempdir(TMP_EXTRACTION_DIR)
 
     return results
 
