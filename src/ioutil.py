@@ -14,10 +14,11 @@ from joblib import Parallel, delayed
 from collections import OrderedDict
 
 
-def _check_text(text_elem):
+def _typecheck(item):
     # Return <int> if able to convert, else <str>.
 
-    return int(text_elem) if text_elem.isdigit() else text_elem
+    return int(item) if item.isdigit() else item
+
 
 def sample_num(sample):
 
@@ -33,11 +34,11 @@ def natural_keys(text):
     """
     """
 
-    return [_check_text(text_elem) for text_elem in re.split('(\d+)', text)]
+    return [_typecheck(item) for item in re.split('(\d+)', text)]
 
 
 def relative_paths(path_to_dir, sorted=True, target_format=None):
-    # Return a list of relative paths to all files in directory.
+    """Produce a list of relative paths to all files in directory."""
 
     if not os.path.isdir(path_to_dir):
         raise RuntimeError('Invalid path {}'.format(path_to_dir))
@@ -75,9 +76,9 @@ def read_nrrd():
 
 def write_nrrd(path_to_dir, images):
 
-    Parallel(n_jobs=n_jobs, verbose=verbose)(
-        nrrd.write(image) for image in images
-    )
+    for image in images:
+        nrrd.write(image)
+
     return None
 
 
@@ -131,8 +132,9 @@ def write_features(path_to_file, results):
 
 def read_prelim_result(path_to_file):
 
-    result = OrderedDict(pd.read_csv(path_to_file).values)
-    return result
+    results = pd.read_csv(path_to_file).to_dict()
+
+    return results
 
 
 def write_prelim_results(path_to_file, results):
@@ -144,9 +146,7 @@ def write_prelim_results(path_to_file, results):
 
     with open(path_to_file, 'w') as outfile:
         writer = csv.DictWriter(
-            outfile,
-            fieldnames=list(results.keys()),
-            lineterminator='\n'
+            outfile, fieldnames=list(results.keys()), lineterminator='\n'
         )
         writer.writeheader()
         writer.writerow(results)
@@ -159,7 +159,8 @@ def write_comparison_results(path_to_file, results):
     """Writes model copmarison results to CSV file."""
 
     data = pd.DataFrame([result for result in results])
-    print(data)
+
+    data.to_csv(path_to_file)
 
     return None
 

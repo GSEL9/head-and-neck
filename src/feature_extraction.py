@@ -40,9 +40,10 @@ class InfoFilter(logging.Filter):
         return False
 
 
-# Adding the filter to the first handler of the radiomics logger limits the info messages on the output to just those
-# from radiomics.batch, but warnings and errors from the entire library are also printed to the output. This does not
-# affect the amount of logging stored in the log file.
+# Adding the filter to the first handler of the radiomics logger limits the
+# info messages on the output to just those from radiomics.batch, but warnings
+# and errors from the entire library are also printed to the output. This does
+# not affect the amount of logging stored in the log file.
 def initiate_logging(path_to_file):
 
     log_handler = logging.FileHandler(filename=path_to_file, mode='a')
@@ -69,7 +70,7 @@ def initiate_logging(path_to_file):
     return None
 
 
-def feature_extraction(param_file, samples, verbose=0, n_jobs=None):
+def feature_extraction(param_file, samples, verbose=0, n_jobs=None, **kwargs):
 
     global TMP_EXTRACTION_DIR
 
@@ -91,17 +92,15 @@ def feature_extraction(param_file, samples, verbose=0, n_jobs=None):
             param_file, sample, path_tempdir, verbose=verbose
         ) for sample in samples
     )
-    # Remove temporary directory if process completed succesfully.
-    #utils._teardown_tempdir(TMP_EXTRACTION_DIR)
-
     return results
 
 
 def _extract_features(param_file, case, path_tempdir, verbose=0):
 
-    features = OrderedDict(case)
     # Monitor extraction procedure.
     _logger = logging.getLogger('radiomics.batch')
+
+    features = OrderedDict(case)
 
     try:
         # Set thread name to patient name.
@@ -134,7 +133,7 @@ def _extract_features(param_file, case, path_tempdir, verbose=0):
     except Exception:
         _logger.error('Feature extraction failed', exc_info=True)
 
-    return feature_tensor
+    return features
 
 
 if __name__ == '__main__':
@@ -158,7 +157,7 @@ if __name__ == '__main__':
     paths_to_samples = ioutil.sample_paths(path_ct_dir, path_masks_dir)
 
     # Extracting raw features.
-    results = feature_extraction(param_file, paths_to_samples[:1])
+    results = feature_extraction(param_file, paths_to_samples[:20])
 
     # Writing raw features to disk.
     ioutil.write_features(path_ct_features, results)
@@ -177,3 +176,5 @@ if __name__ == '__main__':
         './../../data/images/features_ct/prep_features1.csv',
         columns=features.columns
     )
+    # Remove temporary directory if process completed succesfully.
+    #ioutil.teardown_tempdir(TMP_EXTRACTION_DIR)

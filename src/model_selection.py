@@ -31,7 +31,7 @@ def nested_cross_val(*args, verbose=1, score_func=None, **kwargs):
 
     """
     (
-        X, y, estimator, hparam_grid, name, selector, n_splits, random_state,
+        X, y, estimator, hparam_grid, selector, n_splits,  random_state,
         path_tempdir
     ) = args
 
@@ -61,7 +61,7 @@ def nested_cross_val(*args, verbose=1, score_func=None, **kwargs):
 
     results.update(
         {
-            'feature_selection': name,
+            'selector': selector.name,
             'best_params': best_model.get_params(),
             'avg_test_score': np.mean(test_scores),
             'avg_train_score': np.mean(train_scores),
@@ -103,8 +103,8 @@ def grid_search_cv(*args, score_func=None, n_jobs=1, verbose=0, **kwargs):
             y_train, y_test = y[train_idx], y[test_idx]
 
             # NOTE: Standardizing in feature sel function.
-            X_train_sub, X_test_sub, support = selector(
-                X_train, X_test, y_train
+            X_train_sub, X_test_sub, support = selector.func(
+                X_train, X_test, y_train, **selector.params
             )
             train_score, test_score = utils.scale_fit_predict(
                 model, X_train_sub, X_test_sub, y_train, y_test,
@@ -126,8 +126,8 @@ def bootstrap_point632plus(*args, verbose=1, score_func=None, **kwargs):
 
     """
     (
-        X, y, estimator, hparam_grid, name, selector, n_splits, random_state,
-        path_tempdir
+        X, y, estimator, hparam_grid, name, selector_name, n_splits,
+        random_state, path_tempdir
     ) = args
 
     boot = utils.BootstrapOutOfBag(
@@ -141,46 +141,45 @@ def bootstrap_point632plus(*args, verbose=1, score_func=None, **kwargs):
         # Setup model.
         model = estimator(**hparams, random_state=random_state)
 
-        scores, sel_features = [], []
+        train_scores, test_scores, sel_features = [], [], []
         for split_num, (train_idx, test_idx) in enumerate(boot.split(X, y)):
 
             X_train, X_test = X[train_idx], X[test_idx]
             y_train, y_test = y[train_idx], y[test_idx]
 
-            # NOTE: Standardizing in feature sel function.
+            # NOTE: Feature standardizing in selectornction.
             X_train_sub, X_test_sub, support = selector(
-                X_train, X_test, y_train
+                X_train, X_test, y_train,
             )
             sel_features.append(support)
 
-            # Aggregate model predictions.
             model.fit(X_train_sub, y_train)
-
-            y_train_pred = model.predict(X_train_sub)
+            # Aggregate model predictions.
             y_test_pred = model.predict(X_test_sub)
+            y_train_pred = model.predict(X_train_sub)
+            test_score = score_func(y_test, y_test_pred)
+            train_score = score_func(y_train, y_train_pred)
 
-            train_score = 1.0 - score_func(y_train, y_train_pred)
-            test_score = 1.0 - score_func(y_test, y_test_pred)
-
-            train_error, test_error = 1.0 - train_score, 1.0 - test_score
-
-            # Compute .632+ score.
-            weight = utils.omega(
-                train_error, test_error, utils.no_info_rate(
-                    y_test, y_test_pred
+            # Compute train and test scores.
+            train_scores.append(
+                utils.point632p_score(
+                    y_train, y_train_pred, train_score, test_score
                 )
             )
-            scores.append(
-                utils.point632p_score(weight, train_error, test_error)
+            test_scores.append(
+                utils.point632p_score(
+                    y_test, y_test_pred, train_score, test_score
+                )
             )
-        if np.mean(scores) > best_score:
-            best_score = np.mean(scores)
+        if np.mean(test_scores) > best_score:
+            best_score = np.mean(test_scores)
             best_model, best_features = model, sel_features
-        # NOTE: Train + test scores
+
     results.update(
         {
             'feature_selection': name,
-            'point632plus_score': best_score,
+            'avg_test_score': np.mean(test_scores),
+            'avg_train_score': np.mean(train_scores),
             'best_params': best_model.get_params(),
             'best_features': utils.multi_intersect(best_features)
         }
@@ -192,12 +191,3 @@ def bootstrap_point632plus(*args, verbose=1, score_func=None, **kwargs):
     ioutil.write_prelim_results(path_case_file, results)
 
     return results
-
-
-if __name__ == '__main__':
-
-    np.random.seed(1)
-    y_true = np.random.randint(0, 2, 10)
-    y_pred = np.random.randint(0, 2, 10)
-
-    utils.no_info_rate(y_true, y_pred)

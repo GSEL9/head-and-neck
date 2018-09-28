@@ -1,57 +1,117 @@
 import utils
+
 import numpy as np
 
+from ReliefF import ReliefF
+from multiprocessing import cpu_count
 from sklearn import feature_selection
 
+from sklearn.metrics import make_scorer
+from sklearn.linear_model import ElasticNet
+from sklearn.model_selection import GridSearchCV
 
-# Filter selection algorithms:
-# * feature_selection.VarianceThreshold
-#   - Select feature based on variance threshold
-# * feature_selection.chi2 (OBS: Cannot handle negative features)
-#   - Select feature based on p-values > 0.05
-# * feature_selection.mutual_info_classif
-# * feature_selection.f_classif
-#   - Select feature based on p-values > 0.05
-# feature_selection.SelectFpr
-#   - Select feature based on p-values > 0.05
-# feature_selection.SelectFwe
-#   - Select feature based on p-values > 0.05
-# ReliefF
+from mlxtend.feature_selection import SequentialFeatureSelector
 
 
-# Wrapped selection algorithms:
-# * mlxtend.SequentialFeatureSelector
-#   - Sequential Forward Floating Selection
-
-
-# Embedded selection algorithms:
-# feature_selection.SelectFromModel
-#   - Grid Search CV + ElasticNet w/ hparam grid
-#   - Grid Search CV + ElasticNet w/ hparam grid (OBS: Permutation importance)
-
-
-
-# NOTE: Targeting robust features, should therefore select concensus of all
-# methods?
-
-# NOTE Experiments:
-# * Compare outcome of grouping features into categories with using complete
-#   feature pool when selecting features.
-
-
-# TEMP: Dummy setup.
-def variance_threshold(X_train, X_test, y_train):
+# NOTE: Filter methods.
+def variance_threshold(**kwargs):
     """A wrapper of scikit-learn VarianceThreshold."""
 
     # Z-scores.
-    X_train_std, X_test_std = utils.train_test_z_scores(X_train, X_test)
-
-    # Feature selection based on training set to avoid information leakage.
-    support = np.arange(X_train.shape[1])
+    X_train_std, X_test_std = utils.train_test_z_scores(
+        kwargs['X_train'], kwargs['X_test']
+    )
+    selector = feature_selection.VarianceThreshold(threshold=kwargs['alpha'])
+    selector.fit(X_train_std, kwargs['y_train'])
+    support = selector.get_support(indices=True)
 
     return X_train_std[:, support], X_test_std[:, support], support
 
 
+def chi2(**kwargs):
+    """A wrapper of scikit-learn chi2."""
+
+    # NB: Cannot handle negative features.
+
+    # Z-scores.
+    X_train_std, X_test_std = utils.train_test_z_scores(
+        kwargs['X_train'], kwargs['X_test']
+    )
+    _, pvalues = feature_selection.chi2(X_train_std, y_train)
+    support = np.where(pvalues <= threshold)
+
+    return X_train_std[:, support], X_test_std[:, support], support
+
+
+def anova_fvalue(**kwargs):
+    """A wrapper of scikit-learn ANOVA F-value."""
+
+    # Z-scores.
+    X_train_std, X_test_std = utils.train_test_z_scores(
+        kwargs['X_train'], kwargs['X_test']
+    )
+    _, pvalues = feature_selection.f_classif(X_train_std, y_train)
+    support = np.where(pvalues <= alpha)
+
+    return X_train_std[:, support], X_test_std[:, support], support
+
+
+# NOTE: Wrapper methods.
+def false_positive_rates(X_train, X_test, y_train, scorer=None, alpha=0.05):
+    """A wrapper of scikit-learn False Positive Rate test."""
+
+    # Z-scores.
+    X_train_std, X_test_std = utils.train_test_z_scores(X_train, X_test)
+
+    selector = feature_selection.SelectFpr(scorer, alpha=alpha)
+    selector.fit(X_train_std, y_train)
+    support = np.where(selector.pvalues_ <= alpha)
+
+    return X_train_std[:, support], X_test_std[:, support], support
+
+
+def relieff(X_train, X_test, y_train, n_neighbors=100, k=10):
+    """A wrapper of the ReliefF algorithm.
+
+    Args:
+        n_neighbors (int): The number of neighbors to consider when assigning
+            feature importance scores.
+
+    """
+
+    # Z-scores.
+    X_train_std, X_test_std = utils.train_test_z_scores(X_train, X_test)
+
+    selector = ReliefF(n_neighbors=n_neighbors)
+    selector.fit(X_train_std, y_train)
+
+    support = selector.top_features[:k]
+
+    return X_train_std[:, support], X_test_std[:, support], support
+
+
+def sequential_forward_floating(**kwargs):
+    """A wrapper of mlxtend Sequential Forward Floating Selection algorithm."""
+
+    scorer = make_scorer(kwargs['scoring'])
+
+    # Z-scores.
+    X_train_std, X_test_std = utils.train_test_z_scores(
+        kwargs['X_train'], kwargs['X_test']
+    )
+
+    # Set number of CPUs.
+    n_jobs = cpu_count() - 1 if cpu_count() > 1 else cpu_count()
+
+    selector = SequentialFeatureSelector(
+        kwargs['score_model'], k_features=kwargs['k'], forward=True,
+        floating=True, scoring=scorer, cv=['cv'], n_jobs=n_jobs
+    )
+    selector.fit(X_train_std, kwargs['y_train'])
+
+    #support = selector.k_feature_idx_
+
+    #return X_train_std[:, support], X_test_std[:, support], support
 
 
 def feature_evluation():
@@ -63,26 +123,24 @@ def feature_evluation():
     pass
 
 
-
-# NOTE:
-# * On Comparison of Feature Selection Algorithms recommend IN scheme for
-#   feaure sel in cross-val.
-# * Feature sel best practices: https://medium.com/ai%C2%B3-theory-practice-business/three-effective-feature-selection-strategies-e1f86f331fb1
-# * With p >> N: variance and overfitting are major concerns. Highly regularized
-#   approaches often become the methods of choice.
-# * Ridge regression with λ = 0.001 successfully exploits the correlation in the
-#   features when p < N, but cannot do so when p ≫ N. There is not enough
-#   information in the relatively small number of samples to efficiently
-#   estimate the high-dimensional covariance matrix
-# * Various Discriminant Analysis classifiers: https://github.com/manhtuhtk/mlpy/blob/master/mlpy/da.py
-# * Yet despite the high dimensionality, radial kernels (Section 12.3.3)
-#   sometimes deliver superior results in these high dimensional problems. The
-#   radial kernel tends to dampen inner products between points far away from
-#   each other, which in turn leads to robustness to outliers. This occurs
-#   often in high dimensions, and may explain the positive results.
-
-
-
 if __name__ == '__main__':
 
-    pass
+    from sklearn.datasets import load_breast_cancer
+    from sklearn.model_selection import train_test_split
+    from sklearn.metrics import roc_auc_score
+
+    cancer = load_breast_cancer()
+
+    # NB: roc_auc_score requires binary <int> target values.
+    y = cancer.target
+    X = cancer.data
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42
+    )
+    score_model = ElasticNet(random_state=42)
+
+    X_train_sub, X_test_sub, support = relieff(
+        X_train=X_train, X_test=X_test, y_train=y_train, k=10, n_neighbors=100
+    )
+    print(support)

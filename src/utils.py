@@ -72,22 +72,35 @@ class BootstrapOutOfBag:
 
 
 @jit
-def point632p_score(weight, train_error, test_error):
+def _point632p_score(weight, train_error, test_error):
 
     return (1 - weight) * train_error + weight * test_error
 
 
 @jit
-def omega(train_error, test_error, gamma):
+def _omega(train_error, test_error, gamma):
 
     rel_overfit_rate = (test_error - train_error) / (gamma - train_error)
 
     return 0.632 / (1 - (0.368 * rel_overfit_rate))
 
 
-def no_info_rate(y_true, y_pred):
+def _no_info_rate(y_true, y_pred):
 
     # NB: Only applicable to a dichotomous classification problem.
     p_one, q_one = np.sum(y_true == 1), np.sum(y_pred == 1)
 
     return p_one * (1 - q_one) + (1 - p_one) * q_one
+
+
+def point632p_score(y_true, y_pred, train_score, test_score):
+
+    train_error, test_error = 1.0 - train_score, 1.0 - test_score
+
+    # Compute .632+ train score.
+    weight = _omega(
+        train_error, test_error, _no_info_rate(y_true, y_pred)
+    )
+    score = _point632p_score(weight, train_error, test_error)
+
+    return score

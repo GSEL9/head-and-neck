@@ -31,11 +31,22 @@ from sklearn.model_selection import ParameterGrid
 TMP_RESULTS_DIR = 'tmp_model_comparison'
 
 
+class Selector:
+
+    def __init__(self, name, func, params):
+
+        self.name = name
+        self.func = func
+        self.params = params
+
+
 def model_comparison(*args, verbose=0, score_func=None, n_jobs=None, **kwargs):
-    # Collecting repeated average performance data of optimal models.
+    """Collecting repeated average performance measures of selected models.
+
+    """
     (
-        comparison_scheme, estimators, selectors, param_grids, X, y,
-        random_states, n_splits
+        comparison_scheme, X, y, estimators, estimator_params,
+        selectors, selector_params, random_states, n_splits
     ) = args
 
     global TMP_RESULTS_DIR
@@ -48,33 +59,35 @@ def model_comparison(*args, verbose=0, score_func=None, n_jobs=None, **kwargs):
         n_jobs = cpu_count() - 1 if cpu_count() > 1 else cpu_count()
 
     results = []
-    for est_name, estimator in estimators.items():
+    for estimator_name, estimator in estimators.items():
 
         # Setup hyperparameter grid.
-        hparam_grid = ParameterGrid(param_grids[est_name])
-        for name, selector in selectors.items():
+        hparam_grid = ParameterGrid(estimator_params[estimator_name])
+        for selector_name, selector_func in selectors.items():
 
+            selector = Selector(
+                selector_name, selector_func, selector_params[selector_name]
+            )
             # Repeated experimental results.
             results.extend(
                 joblib.Parallel(
                     n_jobs=n_jobs, verbose=verbose
-                    )(
-                        joblib.delayed(comparison_scheme)(
-                            X, y, estimator, hparam_grid, name, selector,
-                            n_splits, random_state, path_tempdir,
-                            verbose=verbose, score_func=score_func
+                )(
+                    joblib.delayed(comparison_scheme)(
+                        X, y, estimator, hparam_grid, selector, n_splits,
+                        random_state, path_tempdir, verbose=verbose,
+                        score_func=score_func
                     ) for random_state in random_states
                 )
             )
     # Remove temporary directory if process completed succesfully.
-    #utils._teardown_tempdir(TMP_EXTRACTION_DIR)
+    ioutil.teardown_tempdir(TMP_RESULTS_DIR)
 
     return results
 
 
 if __name__ == '__main__':
     # NB:
-    # Setup temp dirs holding prelim results.
     # Implement feature selection.
 
     # TODO checkout:
@@ -109,27 +122,27 @@ if __name__ == '__main__':
         'rforest': RandomForestClassifier,
         'logreg': LogisticRegression
     }
-    param_grids = {
-        'logreg': {
-            'C': [0.001, 0.05, 0.1]
-        },
-        'rforest': {
-            'n_estimators': [10, 15]
-        }
+    estimator_params = {
+        'logreg': {'C': [0.001, 0.05, 0.1]},
+        'rforest': {'n_estimators': [10, 15]}
     }
     selectors = {
-        'variance_threshold': feature_selection.variance_threshold
+        'relieff': feature_selection.relieff,
     }
-    #selection_scheme = model_selection.nested_cross_val
-    selection_scheme = model_selection.bootstrap_point632plus
+    selector_params = {
+        'relieff': {'k': 10, 'n_neighbors': 100}
+    }
+    selection_scheme = model_selection.nested_cross_val
+    #selection_scheme = model_selection.bootstrap_point632plus
     results = model_comparison(
-        selection_scheme, estimators, selectors, param_grids, X, y,
-        random_states, n_splits, score_func=roc_auc_score
+        selection_scheme, X, y, estimators, estimator_params, selectors,
+        selector_params, random_states, n_splits, score_func=roc_auc_score
     )
     ioutil.write_comparison_results(
         './../../data/results/model_comparison/model_comparison_results.csv',
         results
     )
+
     # Create final heat map:
     # * Group results according to classifier + feature selector
     # * Average scores across all random states
