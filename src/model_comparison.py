@@ -41,30 +41,34 @@ def model_comparison(*args, verbose=0, score_func=None, n_jobs=None, **kwargs):
     global TMP_RESULTS_DIR
 
     # Setup temporary directory.
-    path_tempdir = utils._setup_tempdir(TMP_RESULTS_DIR)
+    path_tempdir = ioutil.setup_tempdir(TMP_RESULTS_DIR)
 
     # Set number of CPUs.
     if n_jobs is None:
         n_jobs = cpu_count() - 1 if cpu_count() > 1 else cpu_count()
 
     results = []
-    for name, estimator in estimators.items():
+    for est_name, estimator in estimators.items():
 
         # Setup hyperparameter grid.
-        hparam_grid = ParameterGrid(param_grids[name])
-        for label, selector in selectors.items():
+        hparam_grid = ParameterGrid(param_grids[est_name])
+        for name, selector in selectors.items():
 
             # Repeated experimental results.
             results.extend(
                 joblib.Parallel(
                     n_jobs=n_jobs, verbose=verbose
-                )(
-                    joblib.delayed(comparison_scheme)(
-                    X, y, estimator, selector, hparam_grid, selector, n_splits,
-                    random_state, verbose=verbose, score_func=score_func
-                ) for random_state in random_states
+                    )(
+                        joblib.delayed(comparison_scheme)(
+                            X, y, estimator, hparam_grid, name, selector,
+                            n_splits, random_state, path_tempdir,
+                            verbose=verbose, score_func=score_func
+                    ) for random_state in random_states
+                )
             )
-        )
+    # Remove temporary directory if process completed succesfully.
+    #utils._teardown_tempdir(TMP_EXTRACTION_DIR)
+
     return results
 
 
@@ -114,7 +118,7 @@ if __name__ == '__main__':
         }
     }
     selectors = {
-        'dummy': feature_selection.dummy
+        'variance_threshold': feature_selection.variance_threshold
     }
     #selection_scheme = model_selection.nested_cross_val
     selection_scheme = model_selection.bootstrap_point632plus

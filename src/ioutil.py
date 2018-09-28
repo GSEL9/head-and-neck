@@ -94,7 +94,7 @@ def matlab_to_nrrd(path_mat_dir, path_nrrd_dir):
 # Additionally, this script uses 2 additonal Columns: "Patient" and "Reader"
 # These columns indicate the name of the patient (i.e. the image), the reader (i.e. the segmentation), if
 # these columns are omitted, a value is automatically generated ("Patient" = "Pt <Pt_index>", "Reader" = "N/A")
-def sample_paths(path_to_dir, path_mask_dir, target_format='nrrd'):
+def sample_paths(path_image_dir, path_mask_dir, target_format='nrrd'):
     """Generate dictionary of locations to image and corresponding mask."""
 
     sample_paths = relative_paths(
@@ -135,7 +135,7 @@ def read_prelim_result(path_to_file):
     return result
 
 
-def write_prelim_result(path_to_file, feature_vector):
+def write_prelim_results(path_to_file, results):
     """Store results in temporary separate files to prevent write conflicts
     # This allows for the extraction to be interrupted. Upon restarting,
     # already processed cases are found in the TEMP_DIR directory and
@@ -145,39 +145,47 @@ def write_prelim_result(path_to_file, feature_vector):
     with open(path_to_file, 'w') as outfile:
         writer = csv.DictWriter(
             outfile,
-            fieldnames=list(feature_vector.keys()),
+            fieldnames=list(results.keys()),
             lineterminator='\n'
         )
         writer.writeheader()
-        writer.writerow(feature_vector)
+        writer.writerow(results)
 
     return None
 
 
+# ERROR:
 def write_comparison_results(path_to_file, results):
     """Writes model copmarison results to CSV file."""
 
-    data = []
-    for result in results:
-
-        frame = pd.DataFrame(results)
-
-        #frame = pd.DataFrame([experiment for experiment in experiments])
-        #frame.index = [name] * frame.shape[0]
-        #data.append(frame)
-
     data = pd.DataFrame([result for result in results])
-    data.index = data.experiment_id
     print(data)
 
-    #output = pd.concat(data)
-    #output.to_csv(path_to_file, sep=',')
+    return None
+
+
+def setup_tempdir(tempdir, root=None):
+    """Returns path and sets up directory if non-existent."""
+
+    if root is None:
+        root = os.getcwd()
+
+    path_tempdir = os.path.join(root, tempdir)
+    if not os.path.isdir(path_tempdir):
+        os.mkdir(path_tempdir)
+
+    return path_tempdir
+
+
+def teardown_tempdir(path_to_dir):
+    """Removes directory even if not empty."""
+
+    shutil.rmtree(path_to_dir)
 
     return None
 
 
 if __name__ == '__main__':
-    # TODO: Clean up
 
     path_ct_dir = './../../data/images/stacks_ct/cropped_ct'
     path_pet_dir = './../../data/images/stacks_pet/cropped_pet'

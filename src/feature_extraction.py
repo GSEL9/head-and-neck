@@ -1,5 +1,6 @@
 
 import time
+import ioutil
 import shutil
 import csv
 import pandas as pd
@@ -78,7 +79,7 @@ def feature_extraction(param_file, samples, verbose=0, n_jobs=None):
     logger.info('pyradiomics version: {}'.format(radiomics.__version__))
 
     # Setup temporary directory.
-    path_tempdir = utils._setup_tempdir(TMP_EXTRACTION_DIR)
+    path_tempdir = ioutil.setup_tempdir(TMP_EXTRACTION_DIR)
 
     # Set number of CPUs.
     if n_jobs is None:
@@ -87,18 +88,18 @@ def feature_extraction(param_file, samples, verbose=0, n_jobs=None):
     # Extract features.
     results = Parallel(n_jobs=n_jobs, verbose=verbose)(
         delayed(_extract_features)(
-            param_file, sample, path_tempdir
+            param_file, sample, path_tempdir, verbose=verbose
         ) for sample in samples
     )
     # Remove temporary directory if process completed succesfully.
-    utils._teardown_tempdir(TMP_EXTRACTION_DIR)
+    #utils._teardown_tempdir(TMP_EXTRACTION_DIR)
 
     return results
 
 
-def _extract_features(param_file, case, path_tempdir):
+def _extract_features(param_file, case, path_tempdir, verbose=0):
 
-    feature_tensor = OrderedDict(case)
+    features = OrderedDict(case)
     # Monitor extraction procedure.
     _logger = logging.getLogger('radiomics.batch')
 
@@ -111,14 +112,14 @@ def _extract_features(param_file, case, path_tempdir):
 
         # Read results stored prior to process abortion.
         if os.path.isfile(path_case_file):
-            feature_tensor = ioutil.read_prelim_result(path_case_file)
+            features = ioutil.read_prelim_result(path_case_file)
             _logger.info('Already processed case {}'.format(case['Patient']))
 
+        # Extract features.
         else:
-            # Extract features.
             start_time = datetime.now()
             extractor = RadiomicsFeaturesExtractor(param_file)
-            feature_tensor.update(
+            features.update(
                 extractor.execute(
                     case['Image'], case['Mask']
                 ),
@@ -128,7 +129,7 @@ def _extract_features(param_file, case, path_tempdir):
             _logger.info('Case {} processed in {}'.format(case['Patient'],
                                                           delta_time))
             # Write preliminary results to disk.
-            ioutil.write_prelim_result(path_case_file, feature_tensor)
+            ioutil.write_prelim_results(path_case_file, features)
 
     except Exception:
         _logger.error('Feature extraction failed', exc_info=True)
@@ -138,8 +139,6 @@ def _extract_features(param_file, case, path_tempdir):
 
 if __name__ == '__main__':
     # TODO: Setup logger.
-    # TODO: Checking that path to param file exists.
-    # TODO: Clarify meaning of settings params in extraction params file.
 
     import ioutil
     import postprep
@@ -159,7 +158,7 @@ if __name__ == '__main__':
     paths_to_samples = ioutil.sample_paths(path_ct_dir, path_masks_dir)
 
     # Extracting raw features.
-    results = feature_extraction(param_file, paths_to_samples[:3])
+    results = feature_extraction(param_file, paths_to_samples[:1])
 
     # Writing raw features to disk.
     ioutil.write_features(path_ct_features, results)
@@ -169,12 +168,10 @@ if __name__ == '__main__':
     drop_cols = [
         'Image', 'Mask', 'Patient', 'Reader', 'label', 'general'
     ]
-
     # Processing raw features.
     features = postprep.check_extracted_features(
         path_ct_features, drop_cols=drop_cols
     )
-
     # Writing processed features to disk.
     features.to_csv(
         './../../data/images/features_ct/prep_features1.csv',

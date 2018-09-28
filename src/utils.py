@@ -1,3 +1,4 @@
+import os
 import numpy as np
 
 from numba import jit
@@ -77,15 +78,11 @@ def point632p_score(weight, train_error, test_error):
 
 
 @jit
-def omega(rel_overfit_rate):
+def omega(train_error, test_error, gamma):
+
+    rel_overfit_rate = (test_error - train_error) / (gamma - train_error)
 
     return 0.632 / (1 - (0.368 * rel_overfit_rate))
-
-
-@jit
-def rel_overfit_rate(train_error, test_error, gamma):
-
-    return (test_error - train_error) / (gamma - train_error)
 
 
 def no_info_rate(y_true, y_pred):
@@ -94,24 +91,3 @@ def no_info_rate(y_true, y_pred):
     p_one, q_one = np.sum(y_true == 1), np.sum(y_pred == 1)
 
     return p_one * (1 - q_one) + (1 - p_one) * q_one
-
-
-def setup_tempdir(tempdir, oot=None):
-    # Returns path and sets up directory if necessary.
-
-    if root is None:
-        root = os.getcwd()
-
-    path_tempdir = os.path.join(root, tempdir)
-    if not os.path.isdir(path_tempdir):
-        os.mkdir(path_tempdir)
-
-    return path_tempdir
-
-
-def teardown_tempdir(path_to_dir):
-    # Removes directory even if not empty.
-
-    shutil.rmtree(path_to_dir)
-
-    return None

@@ -39,11 +39,18 @@ from sklearn import feature_selection
 #   feature pool when selecting features.
 
 
-
-def variance_threshold():
+# TEMP: Dummy setup.
+def variance_threshold(X_train, X_test, y_train):
     """A wrapper of scikit-learn VarianceThreshold."""
 
-    pass
+    # Z-scores.
+    X_train_std, X_test_std = utils.train_test_z_scores(X_train, X_test)
+
+    # Feature selection based on training set to avoid information leakage.
+    support = np.arange(X_train.shape[1])
+
+    return X_train_std[:, support], X_test_std[:, support], support
+
 
 
 
@@ -73,19 +80,6 @@ def feature_evluation():
 #   radial kernel tends to dampen inner products between points far away from
 #   each other, which in turn leads to robustness to outliers. This occurs
 #   often in high dimensions, and may explain the positive results.
-
-
-# TODO: Feature selection.
-def dummy(X_train, X_test, y_train):
-
-    # Z-scores.
-    X_train_std, X_test_std = utils.train_test_z_scores(X_train, X_test)
-
-    # Feature selection based on training set to avoid information leakage.
-    support = np.arange(X_train.shape[1])
-
-    return X_train_std[:, support], X_test_std[:, support], support
-
 
 
 

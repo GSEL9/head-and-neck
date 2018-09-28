@@ -23,9 +23,6 @@ from sklearn.model_selection import train_test_split
 from sklearn.model_selection import StratifiedKFold
 
 
-PATH_TMP_RESULTS = ''
-
-
 def nested_cross_val(*args, verbose=1, score_func=None, **kwargs):
     """A nested cross validation scheme comprising (1) an inner cross
     validation loop to tune hyperparameters and select the best model, (2) an
@@ -34,11 +31,9 @@ def nested_cross_val(*args, verbose=1, score_func=None, **kwargs):
 
     """
     (
-        X, y, estimator, selector, hparam_grid, selector, n_splits,
-        random_state
+        X, y, estimator, hparam_grid, name, selector, n_splits, random_state,
+        path_tempdir
     ) = args
-
-    global PATH_TMP_RESULTS
 
     results = {'experiment_id': random_state}
 
@@ -66,7 +61,7 @@ def nested_cross_val(*args, verbose=1, score_func=None, **kwargs):
 
     results.update(
         {
-            'feature_selection'
+            'feature_selection': name,
             'best_params': best_model.get_params(),
             'avg_test_score': np.mean(test_scores),
             'avg_train_score': np.mean(train_scores),
@@ -74,7 +69,10 @@ def nested_cross_val(*args, verbose=1, score_func=None, **kwargs):
         }
     )
     # Write preliminary results to disk.
-    # NB: ioutil.write_prelim_result(path_case_file, result)
+    path_case_file = os.path.join(
+        path_tempdir, '{}_{}'.format(estimator.__name__, random_state)
+    )
+    ioutil.write_prelim_results(path_case_file, results)
 
     return results
 
@@ -128,9 +126,10 @@ def bootstrap_point632plus(*args, verbose=1, score_func=None, **kwargs):
 
     """
     (
-        X, y, estimator, selector, hparam_grid, selector, n_splits,
-        random_state
+        X, y, estimator, hparam_grid, name, selector, n_splits, random_state,
+        path_tempdir
     ) = args
+
     boot = utils.BootstrapOutOfBag(
         n_splits=n_splits, random_state=random_state
     )
@@ -156,17 +155,19 @@ def bootstrap_point632plus(*args, verbose=1, score_func=None, **kwargs):
 
             # Aggregate model predictions.
             model.fit(X_train_sub, y_train)
+
             y_train_pred = model.predict(X_train_sub)
+            y_test_pred = model.predict(X_test_sub)
+
             train_score = 1.0 - score_func(y_train, y_train_pred)
-            test_score = 1.0 - score_func(y_test, model.predict(X_test_sub))
+            test_score = 1.0 - score_func(y_test, y_test_pred)
 
             train_error, test_error = 1.0 - train_score, 1.0 - test_score
+
             # Compute .632+ score.
             weight = utils.omega(
-                utils.rel_overfit_rate(
-                    train_error, test_error, utils.no_info_rate(
-                        y_train, y_train_pred
-                    )
+                train_error, test_error, utils.no_info_rate(
+                    y_test, y_test_pred
                 )
             )
             scores.append(
@@ -175,17 +176,20 @@ def bootstrap_point632plus(*args, verbose=1, score_func=None, **kwargs):
         if np.mean(scores) > best_score:
             best_score = np.mean(scores)
             best_model, best_features = model, sel_features
-    # TODO: Add na
+        # NOTE: Train + test scores
     results.update(
         {
-            'feature_selection'
+            'feature_selection': name,
             'point632plus_score': best_score,
             'best_params': best_model.get_params(),
             'best_features': utils.multi_intersect(best_features)
         }
     )
     # Write preliminary results to disk.
-    #ioutil.write_prelim_result(path_case_file, results)
+    path_case_file = os.path.join(
+        path_tempdir, '{}_{}'.format(estimator.__name__, random_state)
+    )
+    ioutil.write_prelim_results(path_case_file, results)
 
     return results
 

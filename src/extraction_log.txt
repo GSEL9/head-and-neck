@@ -1,0 +1,11 @@
+I: (Main) radiomics.batch: pyradiomics version: 2.0.1
+I: (Main) radiomics.batch: pyradiomics version: 2.0.1
+I: (Main) radiomics.batch: pyradiomics version: 2.0.1
+I: (Main) radiomics.batch: pyradiomics version: 2.0.1
+I: (Main) radiomics.batch: pyradiomics version: 2.0.1
+I: (Main) radiomics.batch: pyradiomics version: 2.0.1
+I: (Main) radiomics.batch: pyradiomics version: 2.0.1
+I: (Main) radiomics.batch: pyradiomics version: 2.0.1
+I: (Main) radiomics.batch: pyradiomics version: 2.0.1
+I: (Main) radiomics.batch: pyradiomics version: 2.0.1
+I: (Main) radiomics.batch: pyradiomics version: 2.0.1
