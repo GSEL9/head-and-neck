@@ -41,6 +41,9 @@ def natural_keys(text):
 def relative_paths(path_to_dir, sorted=True, target_format=None):
     """Produce a list of relative paths to all files in directory."""
 
+    if target_format is None:
+        raise ValueError('Must specify target format')
+
     if not os.path.isdir(path_to_dir):
         raise RuntimeError('Invalid path {}'.format(path_to_dir))
 
@@ -61,7 +64,13 @@ def relative_paths(path_to_dir, sorted=True, target_format=None):
 
 
 def matlab_to_nrrd(path_mat, path_nrrd, path_mask=None, modality=None):
-    """Converts MATLAB formatted images to NRRD format."""
+    """Converts MATLAB formatted images to NRRD format.
+
+    Kwargs:
+        path_mask (str):
+        modality (str, {`mask`, `PET`, `CT`}):
+
+    """
 
     if os.path.isfile(path_mat):
         image_data = sio.loadmat(path_mat)

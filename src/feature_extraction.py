@@ -1,3 +1,14 @@
+# -*- coding: utf-8 -*-
+#
+# feature_extraction.py
+#
+
+"""
+"""
+
+__author__ = 'Severin Langberg'
+__email__ = 'langberg91@gmail.com'
+
 
 import time
 import ioutil
@@ -15,7 +26,9 @@ import threading
 from multiprocessing import cpu_count
 from radiomics.featureextractor import RadiomicsFeaturesExtractor
 
+
 threading.current_thread().name = 'Main'
+
 
 TMP_EXTRACTION_DIR = 'tmp_feature_extraction'
 
@@ -24,6 +37,9 @@ def feature_extraction(param_file, samples, verbose=0, n_jobs=None, **kwargs):
 
     global TMP_EXTRACTION_DIR
 
+    if not os.path.isfile(param_file):
+        raise ValueError('Invalid path param file: {}'.format(param_file))
+
     # Setup temporary directory.
     path_tempdir = ioutil.setup_tempdir(TMP_EXTRACTION_DIR)
 
@@ -31,13 +47,15 @@ def feature_extraction(param_file, samples, verbose=0, n_jobs=None, **kwargs):
     if n_jobs is None:
         n_jobs = cpu_count() - 1 if cpu_count() > 1 else cpu_count()
 
+    if verbose > 0:
+        print('Initiated feature extraction.')
+
     # Extract features.
     results = Parallel(n_jobs=n_jobs, verbose=verbose)(
         delayed(_extract_features)(
             param_file, sample, path_tempdir, verbose=verbose
         ) for sample in samples
     )
-
     return results
 
 
@@ -46,20 +64,25 @@ def _extract_features(param_file, case, path_tempdir, verbose=0):
     features = OrderedDict(case)
 
     try:
-        # Set thread name to patient name.
+        # Set thread name to case name.
         threading.current_thread().name = case['Patient']
 
         case_file = ('_').join(('features', str(case['Patient']), '.csv'))
         path_case_file = os.path.join(path_tempdir, case_file)
 
-        # Load results stored prior to process abortion. Necessary to write
-        # complete feature set.
+        # Load results stored prior to process abortion.
         if os.path.isfile(path_case_file):
             features = ioutil.read_prelim_result(path_case_file)
+
+            if verbose > 1:
+                print('Loading previously extracted features.')
 
         # Extract features.
         else:
             extractor = RadiomicsFeaturesExtractor(param_file)
+
+            if verbose > 1:
+                print('Extracting features.')
 
             start_time = datetime.now()
             features.update(
@@ -67,6 +90,9 @@ def _extract_features(param_file, case, path_tempdir, verbose=0):
                 label=case.get('Label', None)
             )
             delta_time = datetime.now() - start_time
+
+            if verbose > 1:
+                print('Writing preliminary results.')
 
             # Write preliminary results to disk.
             ioutil.write_prelim_results(path_case_file, features)
@@ -78,35 +104,28 @@ def _extract_features(param_file, case, path_tempdir, verbose=0):
 
 
 if __name__ == '__main__':
-    # TODO: Prepate P58 images. Create a notebook.
-    # TODO: Experimental setup for feature extraction
-    # 1. Create a notebook to print dynamic range(?) = number of voxel
-    # intensites per image. Save the results in `images` dir.
-    # 2. Determine a binwidth such that range/binwidth remains approximately
-    # the same across images.
-    # 3. Extract and process data into a set for analysis.
-
+    # TEMP: demo run
 
     import ioutil
     import postprep
 
-    path_ct_dir = './../../data/images/stacks_ct/cropped_ct'
-    path_pet_dir = './../../data/images/stacks_pet/cropped_pet'
+    path_ct_dir = './../../data/images/stacks_ct/prep_ct'
+    path_pet_dir = './../../data/images/stacks_pet/prep_pet'
     path_masks_dir = './../../data/images/masks/prep_masks'
 
     path_ct_features = './../../data/results/feature_extraction/features_ct/raw_features1.csv'
     path_pet_features = './../../data/results/feature_extraction/features_pet/raw_features1.csv'
 
-    param_file = './../../data/extraction_settings/example.yaml'
+    param_file = './../../data/extraction_settings/ct_extract_settings1.yaml'
 
     # Ensure the entire extraction is handled on 1 thread
     sitk.ProcessObject_SetGlobalDefaultNumberOfThreads(1)
 
-    paths_to_samples = ioutil.sample_paths(path_ct_dir, path_masks_dir)
-
-    # ERROR: Proper reading prelim results.
+    paths_to_samples = ioutil.sample_paths(
+        path_ct_dir, path_masks_dir, target_format='nrrd'
+    )
     # Extracting raw features.
-    results = feature_extraction(param_file, paths_to_samples[:6])
+    results = feature_extraction(param_file, paths_to_samples[:2])
 
     # Writing raw features to disk.
     ioutil.write_final_results(path_ct_features, results)
@@ -116,6 +135,6 @@ if __name__ == '__main__':
     ]
     features = postprep.check_features(path_ct_features, drop_cols=drop_cols)
     ioutil.write_final_results(
-        './../../data/results/feature_extraction/features_ct/prep_features1.csv', 
+        './../../data/results/feature_extraction/features_ct/prep_features1.csv',
         features
     )

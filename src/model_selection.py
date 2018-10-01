@@ -1,3 +1,15 @@
+# -*- coding: utf-8 -*-
+#
+# model_selection.py
+#
+
+"""
+"""
+
+__author__ = 'Severin Langberg'
+__email__ = 'langberg91@gmail.com'
+
+
 import os
 import utils
 import ioutil
@@ -107,7 +119,7 @@ def grid_search_cv(*args, score_func=None, n_jobs=1, verbose=0, **kwargs):
 
             # NOTE: Standardizing in feature sel function.
             X_train_sub, X_test_sub, support = selector.func(
-                X_train, X_test, y_train, **selector.params
+                (X_train, X_test, y_train, y_test), **selector.params
             )
             train_score, test_score = utils.scale_fit_predict(
                 model, X_train_sub, X_test_sub, y_train, y_test,
@@ -152,7 +164,7 @@ def bootstrap_point632plus(*args, verbose=1, score_func=None, **kwargs):
 
             # NOTE: Standardizing in feature sel function.
             X_train_sub, X_test_sub, support = selector.func(
-                X_train, X_test, y_train, **selector.params
+                (X_train, X_test, y_train, y_test), **selector.params
             )
             model.fit(X_train_sub, y_train)
             # Aggregate model predictions.
