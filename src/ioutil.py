@@ -6,6 +6,7 @@ import csv
 import nrrd
 import shutil
 
+import numpy as np
 import pandas as pd
 import scipy.io as sio
 
@@ -59,43 +60,39 @@ def relative_paths(path_to_dir, sorted=True, target_format=None):
     return rel_paths
 
 
-def read_matlab(path_to_dir):
+def matlab_to_nrrd(path_mat, path_nrrd, path_mask=None, modality=None):
+    """Converts MATLAB formatted images to NRRD format."""
 
-    rel_paths = relative_paths(path_to_dir, target_format='mat')
-    images = Parallel(n_jobs=n_jobs, verbose=verbose)(
-        sio.loadmat(rel_path) for rel_path in rel_paths
-    )
-    return images
+    if os.path.isfile(path_mat):
+        image_data = sio.loadmat(path_mat)
+        image = image_data[modality]
+        nrrd.write(path_nrrd, image)
 
+        if path_mask is not None:
+            mask = np.copy(image)
+            mask[np.isnan(image)] = 0
+            mask[mask != 0] = 1
+            nrrd.write(path_mask, mask)
 
-def read_nrrd():
+    elif os.path.isdir(path_mat) and os.path.isdir(path_nrrd):
 
-    # In case need to convert raw data files.
-    pass
+        mat_rel_paths = relative_paths(path_mat, target_format='mat')
+        nrrd_rel_paths = relative_paths(path_mat, target_format='mat')
 
+        images = Parallel(n_jobs=n_jobs, verbose=verbose)(
+            sio.loadmat(rel_path) for rel_path in rel_paths
+        )
+        for num, image in enumerate(images):
+            nrrd.write(nrrd_rel_paths[num], image[modality])
 
-def write_nrrd(path_to_dir, images):
-
-    for image in images:
-        nrrd.write(image)
+    else:
+        raise RuntimeError('Unable to locate:\n{}\n{}'
+                           ''.format(path_mat, path_nrrd))
 
     return None
 
 
-def matlab_to_nrrd(path_mat_dir, path_nrrd_dir):
-
-    mat_images = read_matlab(path_mat_dir)
-    write_nrrd(path_nrrd_dir, mat_images)
-
-    return None
-
-
-# Assumes the input CSV has at least 2 columns: "Image" and "Mask"
-# These columns indicate the location of the image file and mask file, respectively
-# Additionally, this script uses 2 additonal Columns: "Patient" and "Reader"
-# These columns indicate the name of the patient (i.e. the image), the reader (i.e. the segmentation), if
-# these columns are omitted, a value is automatically generated ("Patient" = "Pt <Pt_index>", "Reader" = "N/A")
-def sample_paths(path_image_dir, path_mask_dir, target_format='nrrd'):
+def sample_paths(path_image_dir, path_mask_dir, target_format=None):
     """Generate dictionary of locations to image and corresponding mask."""
 
     sample_paths = relative_paths(
@@ -114,41 +111,16 @@ def sample_paths(path_image_dir, path_mask_dir, target_format='nrrd'):
     return samples
 
 
-def write_features(path_to_file, results):
-
-    #frame = pd.DataFrame([result for result in results])
-    #frame.to_csv(path_to_file)
-
-    with open(path_to_file, mode='w') as outfile:
-        writer = csv.DictWriter(
-            outfile,
-            fieldnames=list(results[0].keys()),
-            restval='',
-            extrasaction='raise',
-            lineterminator='\n'
-        )
-        writer.writeheader()
-        writer.writerows(results)
-
-
-    return None
-
-
 def read_prelim_result(path_to_file):
+    """Read temporary stored results."""
 
-    with open(path_to_file, mode='r'):
+    results = pd.read_csv(path_to_file, index_col=False)
 
-        results = pd.read_csv(path_to_file).to_dict()
-
-    return results
+    return OrderedDict(zip(*(results.columns, results.values[0])))
 
 
 def write_prelim_results(path_to_file, results):
-    """Store results in temporary separate files to prevent write conflicts
-    # This allows for the extraction to be interrupted. Upon restarting,
-    # already processed cases are found in the TEMP_DIR directory and
-    # loaded instead of re-extracted.
-    """
+    """Store results in temporary separate files to prevent write conflicts."""
 
     with open(path_to_file, 'w') as outfile:
         writer = csv.DictWriter(
@@ -160,13 +132,14 @@ def write_prelim_results(path_to_file, results):
     return None
 
 
-# ERROR:
-def write_comparison_results(path_to_file, results):
-    """Writes model copmarison results to CSV file."""
+def write_final_results(path_to_file, results):
+    """Write the total collection of results to disk."""
 
-    data = pd.DataFrame([result for result in results])
-
-    data.to_csv(path_to_file)
+    if isinstance(results, pd.DataFrame):
+        results.to_csv(path_to_file, columns=results.columns)
+    else:
+        data = pd.DataFrame([result for result in results])
+        data.to_csv(path_to_file)
 
     return None
 
@@ -194,13 +167,21 @@ def teardown_tempdir(path_to_dir):
 
 if __name__ == '__main__':
 
-    path_ct_dir = './../../data/images/stacks_ct/cropped_ct'
-    path_pet_dir = './../../data/images/stacks_pet/cropped_pet'
-    path_masks_dir = './../../data/images/masks/prep_masks'
+    raw_p58_ct = './../../data/images/stacks_ct/raw_ct/P058CT.mat'
+    raw_p58_pet = './../../data/images/stacks_pet/raw_pet/P058PET.mat'
+    raw_p58_mask = './../../data/images/masks/raw_masks/P058mask.mat'
 
-    path_raw_ct_dir = './../../data/images/stacks_ct/raw_ct'
+    prep_p58_ct = './../../data/images/stacks_ct/prep_ct/P058CT.nrrd'
+    prep_p58_pet = './../../data/images/stacks_pet/prep_pet/P058PET.nrrd'
+    prep_p58_mask = './../../data/images/masks/prep_masks/P058mask.nrrd'
 
-    #samples = read_samples(path_ct_dir, path_masks_dir)
-    #print(samples[0].keys())
-
-    read_matlab(path_raw_ct_dir)
+    matlab_to_nrrd(
+        raw_p58_mask, prep_p58_mask, modality='mask'
+    )
+    matlab_to_nrrd(
+        raw_p58_ct, prep_p58_ct, modality='CT',
+        path_mask='./../../data/images/masks/prep_masks/P058mask.nrrd'
+    )
+    matlab_to_nrrd(
+        raw_p58_pet, prep_p58_pet, modality='PET'
+    )

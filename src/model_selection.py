@@ -61,6 +61,7 @@ def nested_cross_val(*args, verbose=1, score_func=None, **kwargs):
 
     results.update(
         {
+            'model': estimator.__name__,
             'selector': selector.name,
             'best_params': best_model.get_params(),
             'avg_test_score': np.mean(test_scores),
@@ -70,7 +71,9 @@ def nested_cross_val(*args, verbose=1, score_func=None, **kwargs):
     )
     # Write preliminary results to disk.
     path_case_file = os.path.join(
-        path_tempdir, '{}_{}'.format(estimator.__name__, random_state)
+        path_tempdir, '{}_{}_{}'.format(
+            estimator.__name__, selector.name, random_state
+        )
     )
     ioutil.write_prelim_results(path_case_file, results)
 
@@ -101,6 +104,7 @@ def grid_search_cv(*args, score_func=None, n_jobs=1, verbose=0, **kwargs):
 
             X_train, X_test = X[train_idx], X[test_idx]
             y_train, y_test = y[train_idx], y[test_idx]
+
             # NOTE: Standardizing in feature sel function.
             X_train_sub, X_test_sub, support = selector.func(
                 X_train, X_test, y_train, **selector.params
@@ -113,8 +117,8 @@ def grid_search_cv(*args, score_func=None, n_jobs=1, verbose=0, **kwargs):
             sel_features.append(support)
 
         if np.mean(test_scores) > best_score:
-            best_score = np.mean(test_scores)
-            best_model, best_features = model, sel_features
+            best_score, best_features = np.mean(test_scores), sel_features
+            best_model = model
 
     return best_model, utils.multi_intersect(sel_features)
 
@@ -125,8 +129,8 @@ def bootstrap_point632plus(*args, verbose=1, score_func=None, **kwargs):
 
     """
     (
-        X, y, estimator, hparam_grid, name, selector_name, n_splits,
-        random_state, path_tempdir
+        X, y, estimator, hparam_grid, selector, n_splits, random_state,
+        path_tempdir
     ) = args
 
     boot = utils.BootstrapOutOfBag(
@@ -146,18 +150,18 @@ def bootstrap_point632plus(*args, verbose=1, score_func=None, **kwargs):
             X_train, X_test = X[train_idx], X[test_idx]
             y_train, y_test = y[train_idx], y[test_idx]
 
-            # NOTE: Feature standardizing in selectornction.
-            X_train_sub, X_test_sub, support = selector(
-                X_train, X_test, y_train,
+            # NOTE: Standardizing in feature sel function.
+            X_train_sub, X_test_sub, support = selector.func(
+                X_train, X_test, y_train, **selector.params
             )
-            sel_features.append(support)
-
             model.fit(X_train_sub, y_train)
             # Aggregate model predictions.
             y_test_pred = model.predict(X_test_sub)
             y_train_pred = model.predict(X_train_sub)
             test_score = score_func(y_test, y_test_pred)
             train_score = score_func(y_train, y_train_pred)
+
+            sel_features.append(support)
 
             # Compute train and test scores.
             train_scores.append(
@@ -176,16 +180,19 @@ def bootstrap_point632plus(*args, verbose=1, score_func=None, **kwargs):
 
     results.update(
         {
-            'feature_selection': name,
-            'avg_test_score': np.mean(test_scores),
-            'avg_train_score': np.mean(train_scores),
+            'model': estimator.__name__,
+            'selector': selector.name,
             'best_params': best_model.get_params(),
+            'avg_test_score': 1.0 - np.mean(test_scores),
+            'avg_train_score': 1.0 - np.mean(train_scores),
             'best_features': utils.multi_intersect(best_features)
         }
     )
     # Write preliminary results to disk.
     path_case_file = os.path.join(
-        path_tempdir, '{}_{}'.format(estimator.__name__, random_state)
+        path_tempdir, '{}_{}_{}'.format(
+            estimator.__name__, selector.name, random_state
+        )
     )
     ioutil.write_prelim_results(path_case_file, results)
 

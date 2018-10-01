@@ -38,7 +38,7 @@ def _filter_columns(features, drop_cols):
     return None
 
 
-def check_extracted_features(path_to_file, drop_cols=None):
+def check_features(path_to_file, drop_cols=None):
 
     features = pd.read_csv(path_to_file)
     # Set patient number index.
@@ -62,12 +62,8 @@ def preprocessing_report():
 
 if __name__ == '__main__':
 
-    path_ct_features = './../../data/images/features_ct/features1.csv'
+    path_ct_features = './../../data/results/feature_extraction/features_ct/raw_features1.csv'
     drop_cols = [
         'Image', 'Mask', 'Patient', 'Reader', 'label', 'general'
     ]
     features = check_extracted_features(path_ct_features, drop_cols=drop_cols)
-    features.to_csv(
-        './../../data/images/features_ct/prep_features1.csv',
-        columns=features.columns
-    )
