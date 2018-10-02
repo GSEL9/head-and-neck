@@ -31,16 +31,6 @@ from sklearn.model_selection import ParameterGrid
 TMP_RESULTS_DIR = 'tmp_model_comparison'
 
 
-class FeatureSelector:
-    """Representation of a feature selection algorithm."""
-
-    def __init__(self, name, func, params):
-
-        self.name = name
-        self.func = func
-        self.params = params
-
-
 def model_comparison(*args, verbose=1, score_func=None, n_jobs=None, **kwargs):
     """Collecting repeated average performance measures of selected models.
 
@@ -64,8 +54,9 @@ def model_comparison(*args, verbose=1, score_func=None, n_jobs=None, **kwargs):
 
         # Setup hyperparameter grid.
         hparam_grid = ParameterGrid(estimator_params[estimator_name])
+
         for selector_name, selector_func in selectors.items():
-            selector = FeatureSelector(
+            selector = feature_selection.FeatureSelector(
                 selector_name, selector_func, selector_params[selector_name]
             )
             # Repeated experimental results.
@@ -127,22 +118,29 @@ if __name__ == '__main__':
         'rforest': {'n_estimators': [10, 15]}
     }
     selectors = {
-        #'sff': feature_selection.forward_floating,
+        'sff': feature_selection.forward_floating,
         'relieff': feature_selection.relieff,
         'var_thresh': feature_selection.variance_threshold,
         'anovaf': feature_selection.anova_fvalue,
+        'mutual_info': feature_selection.mutual_info,
+        'permut_imp': feature_selection.permutation_importance
     }
     selector_params = {
-        #'sff': {
-        #    'model': RandomForestClassifier(n_estimators=10, random_state=0),
-        #    'k': 10, 'cv': 2, 'scoring': 'accuracy'#'roc_auc'
-        #},
+        'sff': {
+            'model': RandomForestClassifier(n_estimators=10, random_state=0),
+            'k': 10, 'cv': 2, 'scoring': 'accuracy'#'roc_auc'
+        },
         'relieff': {'k': 10, 'n_neighbors': 100},
         'var_thresh': {'alpha': 0.05},
         'anovaf': {'alpha': 0.05},
+        'mutual_info': {'n_neighbors': 3, 'thresh': 0.1},
+        'permut_imp': {
+            'model': RandomForestClassifier(n_estimators=10, random_state=0),
+            'thresh': 0, 'nreps': 2
+        }
     }
-    #selection_scheme = model_selection.nested_cross_val
-    selection_scheme = model_selection.bootstrap_point632plus
+    selection_scheme = model_selection.nested_cross_val
+    #selection_scheme = model_selection.bootstrap_point632plus
     results = model_comparison(
         selection_scheme, X, y, estimators, estimator_params, selectors,
         selector_params, random_states, n_splits, score_func=roc_auc_score

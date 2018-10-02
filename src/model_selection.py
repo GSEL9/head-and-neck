@@ -35,6 +35,34 @@ from sklearn.model_selection import train_test_split
 from sklearn.model_selection import StratifiedKFold
 
 
+def _update_prelim_results(results, path_tempdir, random_state, *args):
+    # Update results <dict> container and write preliminary results to disk.
+    (
+        estimator, selector, best_params, avg_test_scores, avg_train_scores,
+        best_features
+    ) = args
+
+    results.update(
+        {
+            'model': estimator.__name__,
+            'selector': selector.name,
+            'best_params': best_params,
+            'avg_test_score': avg_test_scores,
+            'avg_train_score': avg_train_scores,
+            'best_features': best_features
+        }
+    )
+    # Write preliminary results to disk.
+    path_case_file = os.path.join(
+        path_tempdir, '{}_{}_{}'.format(
+            estimator.__name__, selector.name, random_state
+        )
+    )
+    ioutil.write_prelim_results(path_case_file, results)
+
+    return results
+
+
 def nested_cross_val(*args, verbose=1, score_func=None, **kwargs):
     """A nested cross validation scheme comprising (1) an inner cross
     validation loop to tune hyperparameters and select the best model, (2) an
@@ -47,48 +75,39 @@ def nested_cross_val(*args, verbose=1, score_func=None, **kwargs):
         path_tempdir
     ) = args
 
+    # Setup:
     results = {'experiment_id': random_state}
+    feature_votes = feature_selection.FeatureVotings(nfeatures=X.shape[1])
 
     # Outer cross-validation loop.
     kfolds = StratifiedKFold(
         n_splits=n_splits, random_state=random_state, shuffle=True
     )
-    train_scores, test_scores, best_features = [], [], []
+    train_scores, test_scores = [], []
     for fold_num, (train_idx, test_idx) in enumerate(kfolds.split(X, y)):
 
         X_train, X_test = X[train_idx], X[test_idx]
         y_train, y_test = y[train_idx], y[test_idx]
 
         # Determine best model and feature subset.
-        best_model, sel_features = grid_search_cv(
+        best_model, best_support = grid_search_cv(
             estimator, hparam_grid, selector, X_train, y_train, n_splits,
             random_state, verbose=verbose, score_func=score_func
         )
         train_score, test_score = utils.scale_fit_predict(
-            best_model, X_train[:, sel_features], X_test[:, sel_features],
-            y_train, y_test, random_state, score_func=score_func
+            best_model, X_train[:, best_support], X_test[:, best_support],
+            y_train, y_test, score_func=score_func
         )
+        # Bookkeeping of best feature subset in each fold.
+        feature_votes.update_votes(best_support)
         train_scores.append(train_score), test_scores.append(test_score)
-        best_features.append(sel_features)
 
-    results.update(
-        {
-            'model': estimator.__name__,
-            'selector': selector.name,
-            'best_params': best_model.get_params(),
-            'avg_test_score': np.mean(test_scores),
-            'avg_train_score': np.mean(train_scores),
-            'best_features': utils.multi_intersect(best_features)
-        }
+    # NOTE: Maybe necessary to include alternative approach in multi_intersect.
+    results = _update_prelim_results(
+        results, path_tempdir, random_state, estimator, selector,
+        best_model.get_params(), np.mean(test_scores), np.mean(train_scores),
+        feature_votes.major_votes
     )
-    # Write preliminary results to disk.
-    path_case_file = os.path.join(
-        path_tempdir, '{}_{}_{}'.format(
-            estimator.__name__, selector.name, random_state
-        )
-    )
-    ioutil.write_prelim_results(path_case_file, results)
-
     return results
 
 
@@ -99,19 +118,19 @@ def grid_search_cv(*args, score_func=None, n_jobs=1, verbose=0, **kwargs):
     """
     estimator, hparam_grid, selector, X, y, n_splits, random_state = args
 
-    best_score, best_model, best_features = 0.0, None, None
-    train_scores, test_scores, sel_features = [], [], []
+    best_test_score, best_model, best_support = 0, [], []
     for combo_num, hparams in enumerate(hparam_grid):
 
-        # Setup model.
+        # Setup:
         model = estimator(**hparams, random_state=random_state)
+        feature_votes = feature_selection.FeatureVotings(nfeatures=X.shape[1])
 
         # Inner cross-validation loop.
         kfolds = StratifiedKFold(
             n_splits=n_splits, random_state=random_state, shuffle=True
         )
         # Determine average model performance for each hparam combo.
-        train_scores, test_scores, sel_features = [], [], []
+        train_scores, test_scores = [], []
         for num, (train_idx, test_idx) in enumerate(kfolds.split(X, y)):
 
             X_train, X_test = X[train_idx], X[test_idx]
@@ -123,16 +142,18 @@ def grid_search_cv(*args, score_func=None, n_jobs=1, verbose=0, **kwargs):
             )
             train_score, test_score = utils.scale_fit_predict(
                 model, X_train_sub, X_test_sub, y_train, y_test,
-                random_state, score_func=score_func
+                score_func=score_func
             )
+            # Bookkeeping of features selected in each fold.
+            feature_votes.update_votes(support)
             train_scores.append(train_score), test_scores.append(test_score)
-            sel_features.append(support)
 
-        if np.mean(test_scores) > best_score:
-            best_score, best_features = np.mean(test_scores), sel_features
-            best_model = model
+        if np.mean(test_scores) > best_test_score:
+            best_test_score = np.mean(test_scores)
+            best_support = feature_votes.major_votes
+            best_model = estimator(**hparams, random_state=random_state)
 
-    return best_model, utils.multi_intersect(sel_features)
+    return best_model, best_support
 
 
 def bootstrap_point632plus(*args, verbose=1, score_func=None, **kwargs):
@@ -145,67 +166,71 @@ def bootstrap_point632plus(*args, verbose=1, score_func=None, **kwargs):
         path_tempdir
     ) = args
 
+    # Setup:
+    results = {'experiment_id': random_state}
+
     boot = utils.BootstrapOutOfBag(
         n_splits=n_splits, random_state=random_state
     )
-    results = {'experiment_id': random_state}
-
-    best_score, best_model, best_features = 0.0, None, None
+    avg_test_error, avg_train_error, best_model, best_support = 1, 1, [], []
     for combo_num, hparams in enumerate(hparam_grid):
 
-        # Setup model.
-        model = estimator(**hparams, random_state=random_state)
-
-        train_scores, test_scores, sel_features = [], [], []
-        for split_num, (train_idx, test_idx) in enumerate(boot.split(X, y)):
-
-            X_train, X_test = X[train_idx], X[test_idx]
-            y_train, y_test = y[train_idx], y[test_idx]
-
-            # NOTE: Standardizing in feature sel function.
-            X_train_sub, X_test_sub, support = selector.func(
-                (X_train, X_test, y_train, y_test), **selector.params
-            )
-            model.fit(X_train_sub, y_train)
-            # Aggregate model predictions.
-            y_test_pred = model.predict(X_test_sub)
-            y_train_pred = model.predict(X_train_sub)
-            test_score = score_func(y_test, y_test_pred)
-            train_score = score_func(y_train, y_train_pred)
-
-            sel_features.append(support)
-
-            # Compute train and test scores.
-            train_scores.append(
-                utils.point632p_score(
-                    y_train, y_train_pred, train_score, test_score
-                )
-            )
-            test_scores.append(
-                utils.point632p_score(
-                    y_test, y_test_pred, train_score, test_score
-                )
-            )
-        if np.mean(test_scores) > best_score:
-            best_score = np.mean(test_scores)
-            best_model, best_features = model, sel_features
-
-    results.update(
-        {
-            'model': estimator.__name__,
-            'selector': selector.name,
-            'best_params': best_model.get_params(),
-            'avg_test_score': 1.0 - np.mean(test_scores),
-            'avg_train_score': 1.0 - np.mean(train_scores),
-            'best_features': utils.multi_intersect(best_features)
-        }
-    )
-    # Write preliminary results to disk.
-    path_case_file = os.path.join(
-        path_tempdir, '{}_{}_{}'.format(
-            estimator.__name__, selector.name, random_state
+        test_errors, train_errors, support = _boot_validation(
+            estimator, hparams, selector, boot, X, y, random_state,
+            score_func=score_func, n_jobs=1, verbose=0, **kwargs
         )
-    )
-    ioutil.write_prelim_results(path_case_file, results)
+        # Determine the optimal hparam combo.
+        if np.mean(test_errors) < avg_test_error:
+            avg_test_error = np.mean(test_errors)
+            avg_train_error = np.mean(train_errors)
+            best_model = estimator(**hparams, random_state=random_state)
+            best_support = support
 
+    # NOTE: Maybe necessary to include alternative approach in multi_intersect.
+    results = _update_prelim_results(
+        results, path_tempdir, random_state, estimator, selector,
+        best_model.get_params(), avg_test_error, avg_train_error, best_support
+    )
     return results
+
+
+def _boot_validation(*args, score_func=None, n_jobs=1, verbose=0, **kwargs):
+
+    estimator, hparams, selector, boot, X, y, random_state = args
+
+    # Setup:
+    model = estimator(**hparams, random_state=random_state)
+    feature_votes = feature_selection.FeatureVotings(nfeatures=X.shape[1])
+
+    train_errors, test_errors = [], []
+    for split_num, (train_idx, test_idx) in enumerate(boot.split(X, y)):
+
+        X_train, X_test = X[train_idx], X[test_idx]
+        y_train, y_test = y[train_idx], y[test_idx]
+
+        # NOTE: Standardizing in feature sel function.
+        X_train_sub, X_test_sub, support = selector.func(
+            (X_train, X_test, y_train, y_test), **selector.params
+        )
+        model.fit(X_train_sub, y_train)
+        # Aggregate model predictions.
+        y_test_pred = model.predict(X_test_sub)
+        y_train_pred = model.predict(X_train_sub)
+        test_score = score_func(y_test, y_test_pred)
+        train_score = score_func(y_train, y_train_pred)
+
+        # Compute train and test errors.
+        train_errors.append(
+            utils.point632p_score(
+                y_train, y_train_pred, train_score, test_score
+            )
+        )
+        test_errors.append(
+            utils.point632p_score(
+                y_test, y_test_pred, train_score, test_score
+            )
+        )
+        # Bookkeeping of features selected in each fold.
+        feature_votes.update_votes(support)
+
+    return train_errors, test_errors, feature_votes.major_votes

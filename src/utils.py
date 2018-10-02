@@ -35,7 +35,7 @@ def train_test_z_scores(X_train, X_test):
 
 
 def scale_fit_predict(*args, score_func=None, **kwargs):
-    model, X_train, X_test, y_train, y_test, random_state = args
+    model, X_train, X_test, y_train, y_test = args
 
     X_train_std, X_test_std = train_test_z_scores(X_train, X_test)
 

@@ -26,6 +26,73 @@ from mlxtend.evaluate import feature_importance_permutation
 from mlxtend.feature_selection import SequentialFeatureSelector
 
 
+class FeatureVotings:
+
+    def __init__(self, nfeatures=None, thresh=1):
+
+        self.nfeatures = nfeatures
+        self.thresh = thresh
+
+        # NOTE:
+        self.feature_votes = None
+        self.selected_supports = None
+
+    @property
+    def feature_consensus(self):
+        """Retains only the feaures selected in each round."""
+
+        support_matches = utils.multi_intersect(self.selected_supports)
+
+        # At least one feature was selected commonly in all sessions.
+        if np.size(support_matches) > 0:
+            return support_matches
+        else:
+            raise RuntimeError('No feature consensus')
+
+    @property
+    def major_votes(self):
+        """Retains only the k highest voted feaures."""
+
+        support_matches = []
+        for feature, nvotes in self.feature_votes.items():
+
+            if nvotes >= self.thresh:
+                support_matches.append(feature)
+
+        if np.size(support_matches) > 0:
+            return support_matches
+        else:
+            raise RuntimeError('No feature consensus')
+
+
+    def update_votes(self, support):
+        """Update votes per feature in derived support."""
+
+        # Updated at instantiation only.
+        if self.feature_votes is None:
+            self.feature_votes = {num: 0 for num in range(self.nfeatures)}
+
+        if self.selected_supports is None:
+            self.selected_supports = []
+
+        for feature_num in support:
+            self.feature_votes[feature_num] += 1
+
+        self.selected_supports.append(support)
+
+        return self
+
+
+class FeatureSelector:
+    """Representation of a feature selection algorithm."""
+
+    def __init__(self, name, func, params):
+
+        self.name = name
+        self.func = func
+        self.params = params
+
+
 def variance_threshold(data, alpha=0.05):
     """A wrapper of scikit-learn VarianceThreshold."""
 
@@ -51,6 +118,23 @@ def anova_fvalue(data, alpha=0.05):
 
     _, pvalues = feature_selection.f_classif(X_train_std, y_train)
     support = np.squeeze(np.where(pvalues <= alpha))
+
+    return X_train_std[:, support], X_test_std[:, support], support
+
+
+def mutual_info(data, n_neighbors=3, thresh=0.1):
+    """A wrapper of scikit-learn mutual information feature selector."""
+
+    X_train, X_test, y_train, y_test = data
+
+    # Z-scores.
+    X_train_std, X_test_std = utils.train_test_z_scores(X_train, X_test)
+
+    mut_info = feature_selection.mutual_info_classif(
+        X_train_std, y_train, n_neighbors=n_neighbors, random_state=0
+    )
+    # NOTE: Retain features contributing above threshold to model performance.
+    support = np.squeeze(np.argwhere(mut_info > thresh))
 
     return X_train_std[:, support], X_test_std[:, support], support
 
@@ -102,8 +186,9 @@ def forward_floating(data, scoring=None, model=None, k=3, cv=10):
 
 
 def permutation_importance(data, model=None, thresh=0, nreps=100):
-    """"""
+    """A wrapper of mlxtend feature importance permutation algorithm.
 
+    """
     _metric = 'accuracy'
 
     X_train, X_test, y_train, y_test = data
@@ -125,6 +210,9 @@ def permutation_importance(data, model=None, thresh=0, nreps=100):
 
 
 if __name__ == '__main__':
+    # NOTE: quantified the stability of a method as the similarity between the
+    # results obtained by the same feature selection method, when applied on
+    # the two non-overlapping partitions
 
     from sklearn.datasets import load_breast_cancer
     from sklearn.model_selection import train_test_split
@@ -140,7 +228,7 @@ if __name__ == '__main__':
         X, y, test_size=0.2, random_state=42
     )
     rf_clf = RandomForestClassifier(random_state=0)
-    X_train_sub, X_test_sub, support = permutation_importance(
-        (X_train, X_test, y_train, y_test), model=rf_clf,
+    X_train_sub, X_test_sub, support = mutual_info(
+        (X_train, X_test, y_train, y_test)
     )
     print(support)
