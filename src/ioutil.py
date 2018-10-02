@@ -175,21 +175,21 @@ def teardown_tempdir(path_to_dir):
 
 
 if __name__ == '__main__':
+    # NOTE: Converting P58
+    raw_p58_ct = './../../data/images/p58/P058CT.mat'
+    raw_p58_pet = './../../data/images/p58/P058PET.mat'
+    raw_p58_mask = './../../data/images/p58/P058mask.mat'
 
-    raw_p58_ct = './../../data/images/stacks_ct/raw_ct/P058CT.mat'
-    raw_p58_pet = './../../data/images/stacks_pet/raw_pet/P058PET.mat'
-    raw_p58_mask = './../../data/images/masks/raw_masks/P058mask.mat'
-
-    prep_p58_ct = './../../data/images/stacks_ct/prep_ct/P058CT.nrrd'
-    prep_p58_pet = './../../data/images/stacks_pet/prep_pet/P058PET.nrrd'
-    prep_p58_mask = './../../data/images/masks/prep_masks/P058mask.nrrd'
+    prep_p58_ct = './../../data/images/p58/P058CT.nrrd'
+    prep_p58_pet = './../../data/images/p58/P058PET.nrrd'
+    prep_p58_mask = './../../data/images/p58/P058mask.nrrd'
 
     matlab_to_nrrd(
         raw_p58_mask, prep_p58_mask, modality='mask'
     )
     matlab_to_nrrd(
         raw_p58_ct, prep_p58_ct, modality='CT',
-        path_mask='./../../data/images/masks/prep_masks/P058mask.nrrd'
+        path_mask='./../../data/images/p58/P058PET.nrrd'
     )
     matlab_to_nrrd(
         raw_p58_pet, prep_p58_pet, modality='PET'

@@ -109,32 +109,31 @@ if __name__ == '__main__':
     import ioutil
     import postprep
 
-    path_ct_dir = './../../data/images/stacks_ct/prep_ct'
-    path_pet_dir = './../../data/images/stacks_pet/prep_pet'
-    path_masks_dir = './../../data/images/masks/prep_masks'
+    #path_ct_dir = './../../data/images/ct_cropped_prep'
+    path_pet_dir = './../../data/images/pet_cropped_prep'
+    path_masks_dir = './../../data/images/masks_cropped_prep'
 
-    path_ct_features = './../../data/results/feature_extraction/features_ct/raw_features1.csv'
+    #path_ct_features = './../../data/results/feature_extraction/features_ct/raw_features1.csv'
     path_pet_features = './../../data/results/feature_extraction/features_pet/raw_features1.csv'
 
-    param_file = './../../data/extraction_settings/ct_extract_settings1.yaml'
+    param_file = './../../data/extraction_settings/extract_settings1.yaml'
 
     # Ensure the entire extraction is handled on 1 thread
     sitk.ProcessObject_SetGlobalDefaultNumberOfThreads(1)
 
     paths_to_samples = ioutil.sample_paths(
-        path_ct_dir, path_masks_dir, target_format='nrrd'
+        path_pet_dir, path_masks_dir, target_format='nrrd'
     )
+
     # Extracting raw features.
     results = feature_extraction(param_file, paths_to_samples[:2])
 
     # Writing raw features to disk.
-    ioutil.write_final_results(path_ct_features, results)
+    ioutil.write_final_results(path_pet_features, results)
 
-    drop_cols = [
-        'Image', 'Mask', 'Patient', 'Reader', 'label', 'general'
-    ]
-    features = postprep.check_features(path_ct_features, drop_cols=drop_cols)
+    drop_cols = ['Image', 'Mask', 'Patient', 'Reader', 'label', 'general']
+    features = postprep.check_features(path_pet_features, drop_cols=drop_cols)
     ioutil.write_final_results(
-        './../../data/results/feature_extraction/features_ct/prep_features1.csv',
+        './../../data/results/feature_extraction/features_pet/prep_features1.csv',
         features
     )
