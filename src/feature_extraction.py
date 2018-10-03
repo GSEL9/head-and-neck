@@ -56,6 +56,9 @@ def feature_extraction(param_file, samples, verbose=0, n_jobs=None, **kwargs):
             param_file, sample, path_tempdir, verbose=verbose
         ) for sample in samples
     )
+    # Remove temporary directory if process completed succesfully.
+    ioutil.teardown_tempdir(TMP_RESULTS_DIR)
+
     return results
 
 
@@ -109,31 +112,31 @@ if __name__ == '__main__':
     import ioutil
     import postprep
 
-    #path_ct_dir = './../../data/images/ct_cropped_prep'
-    path_pet_dir = './../../data/images/pet_cropped_prep'
-    path_masks_dir = './../../data/images/masks_cropped_prep'
+    path_raw_pet_features = [
+        './../../data/outputs/pet_feature_extraction/raw_features2.csv',
+        './../../data/outputs/pet_feature_extraction/raw_features3.csv',
+        './../../data/outputs/pet_feature_extraction/raw_features4.csv',
+        './../../data/outputs/pet_feature_extraction/raw_features5.csv'
+    ]
 
-    #path_ct_features = './../../data/results/feature_extraction/features_ct/raw_features1.csv'
-    path_pet_features = './../../data/results/feature_extraction/features_pet/raw_features1.csv'
+    path_ct_dir = './../../data/images/ct_cropped_prep/'
+    path_pet_dir = './../../data/images/pet_cropped_prep/'
+    path_masks_dir = './../../data/images/masks_cropped_prep/'
 
-    param_file = './../../data/extraction_settings/extract_settings1.yaml'
-
+    param_file2 = './../../data/extraction_settings/extract_settings2.yaml'
+    param_file3 = './../../data/extraction_settings/extract_settings3.yaml'
+    param_file4 = './../../data/extraction_settings/extract_settings4.yaml'
+    param_file5 = './../../data/extraction_settings/extract_settings5.yaml'
+    param_files = [
+        param_file2, param_file3, param_file4, param_file5
+    ]
     # Ensure the entire extraction is handled on 1 thread
     sitk.ProcessObject_SetGlobalDefaultNumberOfThreads(1)
 
-    paths_to_samples = ioutil.sample_paths(
+    paths_pet_samples = ioutil.sample_paths(
         path_pet_dir, path_masks_dir, target_format='nrrd'
     )
+    for num, param_file in enumerate(param_files):
 
-    # Extracting raw features.
-    results = feature_extraction(param_file, paths_to_samples[:2])
-
-    # Writing raw features to disk.
-    ioutil.write_final_results(path_pet_features, results)
-
-    drop_cols = ['Image', 'Mask', 'Patient', 'Reader', 'label', 'general']
-    features = postprep.check_features(path_pet_features, drop_cols=drop_cols)
-    ioutil.write_final_results(
-        './../../data/results/feature_extraction/features_pet/prep_features1.csv',
-        features
-    )
+        raw_pet_outputs = feature_extraction(param_file, paths_pet_samples)
+        ioutil.write_final_results(path_raw_pet_features[num], raw_pet_outputs)
