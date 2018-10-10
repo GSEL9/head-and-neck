@@ -1,24 +1,43 @@
 
+"""
+Note: joblib 0.12.2 restarts workers when a memory leak is detected.
+"""
 
 import re
 import os
 import csv
 import nrrd
 import shutil
+import operator
 
 import numpy as np
 import pandas as pd
 import scipy.io as sio
 
+from pathlib import Path
 from joblib import Parallel, delayed
 
 from collections import OrderedDict
+from multiprocessing import cpu_count
+
+
+N_JOBS = cpu_count() - 1 if cpu_count() > 1 else cpu_count()
 
 
 def _typecheck(item):
     # Return <int> if able to convert, else <str>.
 
     return int(item) if item.isdigit() else item
+
+
+def swap_format(old_path, old_format, new_format, new_path=None):
+
+    new_fname = os.path.basename(old_path).replace(old_format, new_format)
+
+    if new_path is None:
+        return os.path.join(os.path.dirname(old_path), new_fname)
+    else:
+        return os.path.join(new_path, new_fname)
 
 
 def sample_num(sample):
@@ -38,7 +57,7 @@ def natural_keys(text):
     return [_typecheck(item) for item in re.split('(\d+)', text)]
 
 
-def relative_paths(path_to_dir, sorted=True, target_format=None):
+def relative_paths(path_to_dir, target_format=None):
     """Produce a list of relative paths to all files in directory."""
 
     if target_format is None:
@@ -47,23 +66,19 @@ def relative_paths(path_to_dir, sorted=True, target_format=None):
     if not os.path.isdir(path_to_dir):
         raise RuntimeError('Invalid path {}'.format(path_to_dir))
 
-    file_names = os.listdir(path_to_dir)
+    file_names = sorted(os.listdir(path_to_dir))
 
     rel_paths = []
-    for file_name in file_names:
+    for fname in file_names:
 
-        rel_path = os.path.join(path_to_dir, file_name)
-
+        rel_path = os.path.join(path_to_dir, fname)
         if os.path.isfile(rel_path) and rel_path.endswith(target_format):
             rel_paths.append(rel_path)
-
-        if sorted:
-            rel_paths.sort(key=natural_keys)
 
     return rel_paths
 
 
-def matlab_to_nrrd(path_mat, path_nrrd, path_mask=None, modality=None):
+def matlab_to_nrrd(source_path, target_path, modality=None, path_mask=None):
     """Converts MATLAB formatted images to NRRD format.
 
     Kwargs:
@@ -72,8 +87,10 @@ def matlab_to_nrrd(path_mat, path_nrrd, path_mask=None, modality=None):
 
     """
 
-    if os.path.isfile(path_mat):
-        image_data = sio.loadmat(path_mat)
+    global N_JOBS
+
+    if os.path.isfile(source_path):
+        image_data = sio.loadmat(source_path)
         image = image_data[modality]
         nrrd.write(path_nrrd, image)
 
@@ -83,20 +100,21 @@ def matlab_to_nrrd(path_mat, path_nrrd, path_mask=None, modality=None):
             mask[mask != 0] = 1
             nrrd.write(path_mask, mask)
 
-    elif os.path.isdir(path_mat) and os.path.isdir(path_nrrd):
+    elif os.path.isdir(source_path) and os.path.isdir(target_path):
 
-        mat_rel_paths = relative_paths(path_mat, target_format='mat')
-        nrrd_rel_paths = relative_paths(path_mat, target_format='mat')
+        mat_rel_paths = relative_paths(source_path, target_format='.mat')
+        for num, path_mat in enumerate(mat_rel_paths):
 
-        images = Parallel(n_jobs=n_jobs, verbose=verbose)(
-            sio.loadmat(rel_path) for rel_path in rel_paths
-        )
-        for num, image in enumerate(images):
-            nrrd.write(nrrd_rel_paths[num], image[modality])
-
+            image_data = sio.loadmat(path_mat)
+            image = image_data[modality]
+            nrrd_path = swap_format(
+                path_mat, old_format='.mat', new_format='.nrrd',
+                new_path=target_path
+            )
+            nrrd.write(nrrd_path, image)
     else:
-        raise RuntimeError('Unable to locate:\n{}\n{}'
-                           ''.format(path_mat, path_nrrd))
+        raise RuntimeError('Unable to locate:\n{}\nor\n{}'
+                           ''.format(source_path, target_path))
 
     return None
 
@@ -175,22 +193,8 @@ def teardown_tempdir(path_to_dir):
 
 
 if __name__ == '__main__':
-    # NOTE: Converting P58
-    raw_p58_ct = './../../data/images/p58/P058CT.mat'
-    raw_p58_pet = './../../data/images/p58/P058PET.mat'
-    raw_p58_mask = './../../data/images/p58/P058mask.mat'
-
-    prep_p58_ct = './../../data/images/p58/P058CT.nrrd'
-    prep_p58_pet = './../../data/images/p58/P058PET.nrrd'
-    prep_p58_mask = './../../data/images/p58/P058mask.nrrd'
 
     matlab_to_nrrd(
-        raw_p58_mask, prep_p58_mask, modality='mask'
-    )
-    matlab_to_nrrd(
-        raw_p58_ct, prep_p58_ct, modality='CT',
-        path_mask='./../../data/images/p58/P058PET.nrrd'
-    )
-    matlab_to_nrrd(
-        raw_p58_pet, prep_p58_pet, modality='PET'
+        './../../data/images/masks_cropped_raw/',
+        './../../data/images/masks_cropped_prep/', modality='mask'
     )
