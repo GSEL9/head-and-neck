@@ -38,7 +38,7 @@ class FeatureVotings:
         self.selected_supports = None
 
     @property
-    def feature_consensus(self):
+    def consensus_votes(self):
         """Retains only the feaures selected in each round."""
 
         support_matches = utils.multi_intersect(self.selected_supports)
@@ -81,16 +81,6 @@ class FeatureVotings:
         self.selected_supports.append(support)
 
         return self
-
-
-class FeatureSelector:
-    """Representation of a feature selection algorithm."""
-
-    def __init__(self, name, func, params):
-
-        self.name = name
-        self.func = func
-        self.params = params
 
 
 def variance_threshold(data, alpha=0.05):

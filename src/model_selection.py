@@ -45,7 +45,7 @@ def _update_prelim_results(results, path_tempdir, random_state, *args):
     results.update(
         {
             'model': estimator.__name__,
-            'selector': selector.name,
+            'selector': selector['name'],
             'best_params': best_params,
             'avg_test_score': avg_test_scores,
             'avg_train_score': avg_train_scores,
@@ -55,7 +55,7 @@ def _update_prelim_results(results, path_tempdir, random_state, *args):
     # Write preliminary results to disk.
     path_case_file = os.path.join(
         path_tempdir, '{}_{}_{}'.format(
-            estimator.__name__, selector.name, random_state
+            estimator.__name__, selector['name'], random_state
         )
     )
     ioutil.write_prelim_results(path_case_file, results)
@@ -137,8 +137,8 @@ def grid_search_cv(*args, score_func=None, n_jobs=1, verbose=0, **kwargs):
             y_train, y_test = y[train_idx], y[test_idx]
 
             # NOTE: Standardizing in feature sel function.
-            X_train_sub, X_test_sub, support = selector.func(
-                (X_train, X_test, y_train, y_test), **selector.params
+            X_train_sub, X_test_sub, support = selector['func'](
+                (X_train, X_test, y_train, y_test), **selector['params']
             )
             train_score, test_score = utils.scale_fit_predict(
                 model, X_train_sub, X_test_sub, y_train, y_test,
@@ -150,7 +150,7 @@ def grid_search_cv(*args, score_func=None, n_jobs=1, verbose=0, **kwargs):
 
         if np.mean(test_scores) > best_test_score:
             best_test_score = np.mean(test_scores)
-            best_support = feature_votes.major_votes
+            best_support = feature_votes.consensus_votes
             best_model = estimator(**hparams, random_state=random_state)
 
     return best_model, best_support
@@ -186,12 +186,10 @@ def bootstrap_point632plus(*args, verbose=1, score_func=None, **kwargs):
             best_model = estimator(**hparams, random_state=random_state)
             best_support = support
 
-    # NOTE: Maybe necessary to include alternative approach in multi_intersect.
-    results = _update_prelim_results(
+    return _update_prelim_results(
         results, path_tempdir, random_state, estimator, selector,
         best_model.get_params(), avg_test_error, avg_train_error, best_support
     )
-    return results
 
 
 def _boot_validation(*args, score_func=None, n_jobs=1, verbose=0, **kwargs):
@@ -209,8 +207,8 @@ def _boot_validation(*args, score_func=None, n_jobs=1, verbose=0, **kwargs):
         y_train, y_test = y[train_idx], y[test_idx]
 
         # NOTE: Standardizing in feature sel function.
-        X_train_sub, X_test_sub, support = selector.func(
-            (X_train, X_test, y_train, y_test), **selector.params
+        X_train_sub, X_test_sub, support = selector['func'](
+            (X_train, X_test, y_train, y_test), **selector['params']
         )
         model.fit(X_train_sub, y_train)
         # Aggregate model predictions.
@@ -233,4 +231,4 @@ def _boot_validation(*args, score_func=None, n_jobs=1, verbose=0, **kwargs):
         # Bookkeeping of features selected in each fold.
         feature_votes.update_votes(support)
 
-    return train_errors, test_errors, feature_votes.major_votes
+    return train_errors, test_errors, feature_votes.consensus_votes

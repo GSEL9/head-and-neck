@@ -40,10 +40,10 @@ def feature_extraction(param_file, samples, verbose=0, n_jobs=None, **kwargs):
     if not os.path.isfile(param_file):
         raise ValueError('Invalid path param file: {}'.format(param_file))
 
-    # Setup temporary directory.
+    # Setup temporary directory to store preliminary results.
     path_tempdir = ioutil.setup_tempdir(TMP_EXTRACTION_DIR)
 
-    # Set number of CPUs.
+    # Set number of available CPUs.
     if n_jobs is None:
         n_jobs = cpu_count() - 1 if cpu_count() > 1 else cpu_count()
 
@@ -56,8 +56,9 @@ def feature_extraction(param_file, samples, verbose=0, n_jobs=None, **kwargs):
             param_file, sample, path_tempdir, verbose=verbose
         ) for sample in samples
     )
-    # Remove temporary directory if process completed succesfully.
-    ioutil.teardown_tempdir(TMP_RESULTS_DIR)
+
+    # Clean up temporary directory when process complete.
+    ioutil.teardown_tempdir(TMP_EXTRACTION_DIR)
 
     return results
 
@@ -67,21 +68,20 @@ def _extract_features(param_file, case, path_tempdir, verbose=0):
     features = OrderedDict(case)
 
     try:
-        # Set thread name to case name.
         threading.current_thread().name = case['Patient']
 
         case_file = ('_').join(('features', str(case['Patient']), '.csv'))
         path_case_file = os.path.join(path_tempdir, case_file)
 
-        # Load results stored prior to process abortion.
         if os.path.isfile(path_case_file):
+            # Load results stored prior to process abortion.
             features = ioutil.read_prelim_result(path_case_file)
 
             if verbose > 1:
                 print('Loading previously extracted features.')
 
-        # Extract features.
         else:
+            # Extract features.
             extractor = RadiomicsFeaturesExtractor(param_file)
 
             if verbose > 1:
@@ -107,36 +107,68 @@ def _extract_features(param_file, case, path_tempdir, verbose=0):
 
 
 if __name__ == '__main__':
-    # TEMP: demo run
-
-    import ioutil
-    import postprep
-
-    path_raw_pet_features = [
-        './../../data/outputs/pet_feature_extraction/raw_features2.csv',
-        './../../data/outputs/pet_feature_extraction/raw_features3.csv',
-        './../../data/outputs/pet_feature_extraction/raw_features4.csv',
-        './../../data/outputs/pet_feature_extraction/raw_features5.csv'
-    ]
 
     path_ct_dir = './../../data/images/ct_cropped_prep/'
     path_pet_dir = './../../data/images/pet_cropped_prep/'
     path_masks_dir = './../../data/images/masks_cropped_prep/'
 
-    param_file2 = './../../data/extraction_settings/extract_settings2.yaml'
-    param_file3 = './../../data/extraction_settings/extract_settings3.yaml'
-    param_file4 = './../../data/extraction_settings/extract_settings4.yaml'
-    param_file5 = './../../data/extraction_settings/extract_settings5.yaml'
-    param_files = [
-        param_file2, param_file3, param_file4, param_file5
+    ct_param_files = [
+        './../../data/extraction_settings/ct_extract_settings1.yaml',
+        './../../data/extraction_settings/ct_extract_settings2.yaml',
+        './../../data/extraction_settings/ct_extract_settings3.yaml',
+        './../../data/extraction_settings/ct_extract_settings4.yaml',
+        './../../data/extraction_settings/ct_extract_settings5.yaml'
     ]
-    # Ensure the entire extraction is handled on 1 thread
+    pet_param_files = [
+        './../../data/extraction_settings/pet_extract_settings1.yaml',
+        './../../data/extraction_settings/pet_extract_settings2.yaml',
+        './../../data/extraction_settings/pet_extract_settings3.yaml',
+        './../../data/extraction_settings/pet_extract_settings4.yaml',
+        './../../data/extraction_settings/pet_extract_settings5.yaml'
+    ]
+    path_raw_ct_features = [
+        './../../data/outputs/ct_feature_extraction/raw_ct_features1.csv',
+        './../../data/outputs/ct_feature_extraction/raw_ct_features2.csv',
+        './../../data/outputs/ct_feature_extraction/raw_ct_features3.csv',
+        './../../data/outputs/ct_feature_extraction/raw_ct_features4.csv',
+        './../../data/outputs/ct_feature_extraction/raw_ct_features5.csv'
+    ]
+    path_raw_pet_features = [
+        './../../data/outputs/pet_feature_extraction/raw_pet_features1.csv',
+        './../../data/outputs/pet_feature_extraction/raw_pet_features2.csv',
+        './../../data/outputs/pet_feature_extraction/raw_pet_features3.csv',
+        './../../data/outputs/pet_feature_extraction/raw_pet_features4.csv',
+        './../../data/outputs/pet_feature_extraction/raw_pet_features5.csv'
+    ]
+
     sitk.ProcessObject_SetGlobalDefaultNumberOfThreads(1)
 
+    paths_ct_samples = ioutil.sample_paths(
+        path_ct_dir, path_masks_dir, target_format='nrrd'
+    )
     paths_pet_samples = ioutil.sample_paths(
         path_pet_dir, path_masks_dir, target_format='nrrd'
     )
-    for num, param_file in enumerate(param_files):
 
-        raw_pet_outputs = feature_extraction(param_file, paths_pet_samples)
+    for num, _ in enumerate(paths_pet_samples):
+
+        print('Starting run: {}\nParam file: {}'.format(num, param_file))
+
+        start_time = datetime.now()
+        raw_pet_outputs = feature_extraction(pet_param_files[num], paths_pet_samples)
+        print('Duration feature extraction: {}'.format(datetime.now() - start_time))
+
         ioutil.write_final_results(path_raw_pet_features[num], raw_pet_outputs)
+        print('Duration extraction process: {}'.format(datetime.now() - start_time))
+
+
+    for num, _ in enumerate(paths_ct_samples):
+
+        print('Starting run: {}\nParam file: {}'.format(num, param_file))
+
+        start_time = datetime.now()
+        raw_ct_outputs = feature_extraction(ct_param_files[num], paths_ct_samples)
+        print('Duration feature extraction: {}'.format(datetime.now() - start_time))
+
+        ioutil.write_final_results(path_raw_ct_features[num], raw_ct_outputs)
+        print('Duration extraction process: {}'.format(datetime.now() - start_time))

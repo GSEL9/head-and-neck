@@ -56,9 +56,10 @@ def model_comparison(*args, verbose=1, score_func=None, n_jobs=None, **kwargs):
         hparam_grid = ParameterGrid(estimator_params[estimator_name])
 
         for selector_name, selector_func in selectors.items():
-            selector = feature_selection.FeatureSelector(
-                selector_name, selector_func, selector_params[selector_name]
-            )
+            selector = {
+                'name': selector_name, 'func': selector_func,
+                'params': selector_params[selector_name]
+            }
             # Repeated experimental results.
             results.extend(
                 joblib.Parallel(
@@ -78,35 +79,23 @@ def model_comparison(*args, verbose=1, score_func=None, n_jobs=None, **kwargs):
 
 
 if __name__ == '__main__':
-    # NB:
-    # Implement feature selection.
-
-    # TODO checkout:
-    # * ElasticNet + RF
-    # * Upsampling/resampling
-    # * Generate synthetic samples with SMOTE algorithm (p. 216).
-    # * Display models vs feature sel in heat map with performance.
-    # * Display model performance as function of num selected features.
-
     from sklearn.linear_model import LogisticRegression
     from sklearn.ensemble import RandomForestClassifier
     from sklearn.feature_selection import VarianceThreshold
     from sklearn.datasets import load_breast_cancer
+
+    # NB ERROR:
+    # For imbalanced datasets, the Average Precision metric is sometimes a
+    # better alternative to the AUROC. The AP score is the area under the precision-recall curve.
+    # https://stats.stackexchange.com/questions/222558/classification-evaluation-metrics-for-highly-imbalanced-data
+    # REF: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4403252/
     from sklearn.metrics import roc_auc_score
 
     cancer = load_breast_cancer()
-    # NB: roc_auc_score requires binary <int> target values.
     y = cancer.target
     X = cancer.data
 
-    # NOTE: Number of CV folds.
-    # * Num outer train samples = (n_splits - 1) * 200 / n_splits
-    # * Num outer test sapmles = 200 / n_splits
-    # * Num inner train samples = (n_splits - 1) * Num outer train samples / n_splits
-    # * Num inner test samples = Num outer train samples / n_splits
     n_splits = 2
-
-    # NOTE: Number of experiments
     random_states = np.arange(3)
 
     estimators = {
@@ -123,7 +112,7 @@ if __name__ == '__main__':
         'var_thresh': feature_selection.variance_threshold,
         'anovaf': feature_selection.anova_fvalue,
         'mutual_info': feature_selection.mutual_info,
-        'permut_imp': feature_selection.permutation_importance
+        #'permut_imp': feature_selection.permutation_importance
     }
     selector_params = {
         'sff': {
@@ -134,10 +123,10 @@ if __name__ == '__main__':
         'var_thresh': {'alpha': 0.05},
         'anovaf': {'alpha': 0.05},
         'mutual_info': {'n_neighbors': 3, 'thresh': 0.1},
-        'permut_imp': {
-            'model': RandomForestClassifier(n_estimators=10, random_state=0),
-            'thresh': 0, 'nreps': 2
-        }
+        #'permut_imp': {
+        #    'model': RandomForestClassifier(n_estimators=10, random_state=0),
+        #    'thresh': 0, 'nreps': 2
+        #}
     }
     selection_scheme = model_selection.nested_cross_val
     #selection_scheme = model_selection.bootstrap_point632plus
@@ -146,7 +135,7 @@ if __name__ == '__main__':
         selector_params, random_states, n_splits, score_func=roc_auc_score
     )
     ioutil.write_final_results(
-        './../../data/results/model_comparison/model_comparison_results.csv',
+        './../../data/outputs/model_comparison/test.csv',
         results
     )
     # Create final heat map:
