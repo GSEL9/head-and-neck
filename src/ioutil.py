@@ -78,7 +78,7 @@ def relative_paths(path_to_dir, target_format=None):
     return rel_paths
 
 
-def matlab_to_nrrd(source_path, target_path, modality=None, path_mask=None):
+def matlab_to_nrrd(source_path, target_path, modality=None, transform=None):
     """Converts MATLAB formatted images to NRRD format.
 
     Kwargs:
@@ -89,24 +89,18 @@ def matlab_to_nrrd(source_path, target_path, modality=None, path_mask=None):
 
     global N_JOBS
 
-    if os.path.isfile(source_path):
-        image_data = sio.loadmat(source_path)
-        image = image_data[modality]
-        nrrd.write(path_nrrd, image)
-
-        if path_mask is not None:
-            mask = np.copy(image)
-            mask[np.isnan(image)] = 0
-            mask[mask != 0] = 1
-            nrrd.write(path_mask, mask)
-
-    elif os.path.isdir(source_path) and os.path.isdir(target_path):
+    if os.path.isdir(source_path) and os.path.isdir(target_path):
 
         mat_rel_paths = relative_paths(source_path, target_format='.mat')
         for num, path_mat in enumerate(mat_rel_paths):
 
             image_data = sio.loadmat(path_mat)
-            image = image_data[modality]
+            # Apply image transformation function.
+            if transform is not None:
+                image = transform(image_data[modality])
+            else:
+                image = image_data[modality]
+
             nrrd_path = swap_format(
                 path_mat, old_format='.mat', new_format='.nrrd',
                 new_path=target_path
@@ -122,12 +116,9 @@ def matlab_to_nrrd(source_path, target_path, modality=None, path_mask=None):
 def sample_paths(path_image_dir, path_mask_dir, target_format=None):
     """Generate dictionary of locations to image and corresponding mask."""
 
-    sample_paths = relative_paths(
-        path_image_dir, sorted=True, target_format=target_format
-    )
-    mask_paths = relative_paths(
-        path_mask_dir, sorted=True, target_format=target_format
-    )
+    sample_paths = relative_paths(path_image_dir, target_format=target_format)
+    mask_paths = relative_paths(path_mask_dir, target_format=target_format)
+
     samples = []
     for sample, mask in zip(sample_paths, mask_paths):
         samples.append(
@@ -194,7 +185,14 @@ def teardown_tempdir(path_to_dir):
 
 if __name__ == '__main__':
 
+    def ct_to_hu(image):
+        """Convert CT intensity to HU."""
+
+        return image - 1024
+
+
     matlab_to_nrrd(
-        './../../data/images/masks_cropped_raw/',
-        './../../data/images/masks_cropped_prep/', modality='mask'
+        './../../data/images/ct_cropped_raw/',
+        './../../data/images/ct_cropped_prep/',
+        modality='CT', transform=None
     )

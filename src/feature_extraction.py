@@ -107,7 +107,6 @@ def _extract_features(param_file, case, path_tempdir, verbose=0):
 
 
 if __name__ == '__main__':
-
     path_ct_dir = './../../data/images/ct_cropped_prep/'
     path_pet_dir = './../../data/images/pet_cropped_prep/'
     path_masks_dir = './../../data/images/masks_cropped_prep/'
@@ -150,24 +149,23 @@ if __name__ == '__main__':
         path_pet_dir, path_masks_dir, target_format='nrrd'
     )
 
-    for num, _ in enumerate(paths_pet_samples):
+    for num, pet_param_file in enumerate(pet_param_files):
 
-        print('Starting run: {}\nParam file: {}'.format(num, param_file))
+        print('Init run with param file: {}'.format(pet_param_file))
 
         start_time = datetime.now()
-        raw_pet_outputs = feature_extraction(pet_param_files[num], paths_pet_samples)
+        raw_pet_outputs = feature_extraction(pet_param_file, paths_pet_samples)
         print('Duration feature extraction: {}'.format(datetime.now() - start_time))
 
         ioutil.write_final_results(path_raw_pet_features[num], raw_pet_outputs)
         print('Duration extraction process: {}'.format(datetime.now() - start_time))
 
+    for num, ct_param_file in enumerate(ct_param_files):
 
-    for num, _ in enumerate(paths_ct_samples):
-
-        print('Starting run: {}\nParam file: {}'.format(num, param_file))
+        print('Init run with param file: {}'.format(ct_param_file))
 
         start_time = datetime.now()
-        raw_ct_outputs = feature_extraction(ct_param_files[num], paths_ct_samples)
+        raw_ct_outputs = feature_extraction(ct_param_file, paths_ct_samples)
         print('Duration feature extraction: {}'.format(datetime.now() - start_time))
 
         ioutil.write_final_results(path_raw_ct_features[num], raw_ct_outputs)

@@ -91,9 +91,8 @@ if __name__ == '__main__':
     # REF: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4403252/
     from sklearn.metrics import roc_auc_score
 
-    cancer = load_breast_cancer()
-    y = cancer.target
-    X = cancer.data
+    df_X = pd.read_csv('')
+    df_y = pd.read_csv('')
 
     n_splits = 2
     random_states = np.arange(3)
@@ -130,14 +129,11 @@ if __name__ == '__main__':
     }
     selection_scheme = model_selection.nested_cross_val
     #selection_scheme = model_selection.bootstrap_point632plus
-    results = model_comparison(
-        selection_scheme, X, y, estimators, estimator_params, selectors,
-        selector_params, random_states, n_splits, score_func=roc_auc_score
-    )
-    ioutil.write_final_results(
-        './../../data/outputs/model_comparison/test.csv',
-        results
-    )
-    # Create final heat map:
-    # * Group results according to classifier + feature selector
-    # * Average scores across all random states
+    #results = model_comparison(
+    #    selection_scheme, X, y, estimators, estimator_params, selectors,
+    #    selector_params, random_states, n_splits, score_func=roc_auc_score
+    #)
+    #ioutil.write_final_results(
+    #    './../../data/outputs/model_comparison/test.csv',
+    #    results
+    #)
