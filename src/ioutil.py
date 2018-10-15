@@ -78,7 +78,7 @@ def relative_paths(path_to_dir, target_format=None):
     return rel_paths
 
 
-def matlab_to_nrrd(source_path, target_path, modality=None, transform=None):
+def matlab_to_nrrd(source_path, target_path, transform=None, **kwargs):
     """Converts MATLAB formatted images to NRRD format.
 
     Kwargs:
@@ -97,9 +97,9 @@ def matlab_to_nrrd(source_path, target_path, modality=None, transform=None):
             image_data = sio.loadmat(path_mat)
             # Apply image transformation function.
             if transform is not None:
-                image = transform(image_data[modality])
+                image = transform(image_data[kwargs['modality']], **kwargs)
             else:
-                image = image_data[modality]
+                image = image_data[kwargs['modality']]
 
             nrrd_path = swap_format(
                 path_mat, old_format='.mat', new_format='.nrrd',
@@ -183,10 +183,33 @@ def teardown_tempdir(path_to_dir):
     return None
 
 
+def _load_feature_batch(path_target_dir):
+
+    fnames = os.listdir(path_target_dir)
+
+    feature_sets = {}
+    for num, fname in enumerate(fnames):
+        feature_set[num] = pd.read_csv(fname, index_col=0)
+
+    return feature_set
+
+
+def load_feature_batches(path_ref_dir):
+
+    target_dirs = [ref_dir for ref_dir in os.listdir(path_ref_dir)
+        if not ref_dir.startswith('.') and not ref_dir.endswith('.csv')
+    ]
+    for target_dir in target_dirs:
+
+        path_target_dir = os.path.join(path_ref_dir, target_dir)
+
+        yield _load_feature_batch(path_target_dir)
+
+
 if __name__ == '__main__':
 
     def ct_to_hu(image):
-        """Convert CT intensity to HU."""
+        #Convert CT intensity to HU.
 
         return image - 1024
 

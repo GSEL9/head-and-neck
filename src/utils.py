@@ -1,8 +1,72 @@
+# -*- coding: utf-8 -*-
+#
+# utils.py
+#
+
+"""
+Utility module for the head and neck project.
+"""
+
+__author__ = 'Severin Langberg'
+__email__ = 'langberg91@gmail.com'
+
+
 import os
+import logging
+import radiomics
+
 import numpy as np
 
 from numba import jit
 from sklearn.preprocessing import StandardScaler
+
+
+def setup_logger(fname='extraction_log.txt'):
+    """Setup logger with info filter."""
+
+    # Location of output log file
+    log_handler = logging.FileHandler(
+        filename=os.path.join(os.getcwd(), fname), mode='a'
+    )
+    log_handler.setLevel(logging.INFO)
+    log_handler.setFormatter(logging.Formatter(
+        '%(levelname)-.1s: (%(threadName)s) %(name)s: %(message)s')
+    )
+    pyrad_logger = radiomics.logger
+    pyrad_logger.addHandler(log_handler)
+
+    # Handler printing to the output.
+    outputhandler = pyrad_logger.handlers[0]
+    outputhandler.setFormatter(logging.Formatter(
+        '[%(asctime)-.19s] (%(threadName)s) %(name)s: %(message)s')
+    )
+    # Ensures that INFO messages are being passed to the filter
+    outputhandler.setLevel(logging.INFO)
+    outputhandler.addFilter(LoggingInfoFilter('radiomics.batch'))
+
+    logging.getLogger('radiomics.batch').debug('Logging init')
+
+    return None
+
+
+class LoggingInfoFilter(logging.Filter):
+    """A filter that allows messages from specified filter and level INFO and
+    up including level WARNING and up from other loggers.
+    """
+
+    def __init__(self, name):
+
+        super(LoggingInfoFilter, self).__init__(name)
+        self.level = logging.WARNING
+
+    def filter(self, record):
+
+        if record.levelno >= self.level:
+            return True
+        elif record.name == self.name and record.levelno >= logging.INFO:
+            return True
+        else:
+            return False
 
 
 def multi_intersect(arrays):

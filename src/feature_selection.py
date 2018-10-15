@@ -13,6 +13,7 @@ __email__ = 'langberg91@gmail.com'
 import utils
 
 import numpy as np
+import pandas as pd
 
 from ReliefF import ReliefF
 from multiprocessing import cpu_count
@@ -47,7 +48,7 @@ class FeatureVotings:
         if np.size(support_matches) > 0:
             return support_matches
         else:
-            raise RuntimeError('No feature consensus')
+            raise RuntimeError('No feature consensus. Tip: Adjust threshold.')
 
     @property
     def major_votes(self):
@@ -83,6 +84,70 @@ class FeatureVotings:
         return self
 
 
+class CorrelationThreshold:
+
+    def __init__(self, threshold=0.0):
+
+        self.threshold = threshold
+
+        # NOTE:
+        self._data = None
+        self._support = None
+
+    def fit(self, X, y=None, **kwargs):
+
+        if isinstance(X, pd.DataFrame):
+            self._data = X
+        else:
+            self._data = pd.DataFrame(X, columns=np.arange(X.shape[1]))
+
+        # Create correlation matrix.
+        corr_mat = self._data.corr().abs()
+
+        # Select upper triangle of correlation matrix.
+        upper = corr_mat.where(
+            np.triu(np.ones(np.shape(corr_mat)), k=1).astype(np.bool)
+        )
+        # Find index of feature columns with correlation > thresh.
+        corr_cols = [
+            col for col in upper.columns if any(upper[col] > self.threshold)
+        ]
+        self._data.drop(self._data.columns[corr_cols], axis=1, inplace=True)
+
+        return self
+
+    def get_support(self, **kwargs):
+
+        return self._data.columns
+
+
+def dummy(data, **kwargs):
+
+    X_train, X_test, y_train, y_test = data
+
+    X_train_std, X_test_std = utils.train_test_z_scores(X_train, X_test)
+
+    support = np.arange(X_train.shape[1])
+
+    return X_train_std[:, support], X_test_std[:, support], support
+
+
+def correlation_threshold(data, alpha=0.05):
+
+    X_train, X_test, y_train, y_test = data
+
+    X_train_std, X_test_std = utils.train_test_z_scores(X_train, X_test)
+
+    selector = CorrelationThreshold(threshold=alpha)
+
+    # NOTE: Cannot filter variance from standardized data.
+    selector.fit(X_train, y_train)
+    support = selector.get_support(indices=True)
+
+    return X_train_std[:, support], X_test_std[:, support], support
+
+
+# If you standardize them to have unit variance before, this filtering of course makes no sense
 def variance_threshold(data, alpha=0.05):
     """A wrapper of scikit-learn VarianceThreshold."""
 
@@ -92,7 +157,8 @@ def variance_threshold(data, alpha=0.05):
     X_train_std, X_test_std = utils.train_test_z_scores(X_train, X_test)
 
     selector = feature_selection.VarianceThreshold(threshold=alpha)
-    selector.fit(X_train_std, y_train)
+    # NOTE: Cannot filter variance from standardized data.
+    selector.fit(X_train, y_train)
     support = selector.get_support(indices=True)
 
     return X_train_std[:, support], X_test_std[:, support], support
@@ -106,13 +172,13 @@ def anova_fvalue(data, alpha=0.05):
     # Z-scores.
     X_train_std, X_test_std = utils.train_test_z_scores(X_train, X_test)
 
-    _, pvalues = feature_selection.f_classif(X_train_std, y_train)
+    _, pvalues = feature_selection.f_classif(X_train, y_train)
     support = np.squeeze(np.where(pvalues <= alpha))
 
     return X_train_std[:, support], X_test_std[:, support], support
 
 
-def mutual_info(data, n_neighbors=3, thresh=0.1):
+def mutual_info(data, n_neighbors=3, thresh=0.05):
     """A wrapper of scikit-learn mutual information feature selector."""
 
     X_train, X_test, y_train, y_test = data
@@ -129,7 +195,7 @@ def mutual_info(data, n_neighbors=3, thresh=0.1):
     return X_train_std[:, support], X_test_std[:, support], support
 
 
-def relieff(data, n_neighbors=100, k=10):
+def relieff(data, n_neighbors=20, k=10):
     """A wrapper of the ReliefF algorithm.
 
     Args:
@@ -211,14 +277,21 @@ if __name__ == '__main__':
     cancer = load_breast_cancer()
 
     # NB: roc_auc_score requires binary <int> target values.
-    y = cancer.target
-    X = cancer.data
+    #y = cancer.target
+    #X = cancer.data
+
+    X = pd.read_csv(
+        './../../data/prepped/discr_combo/log-sigma-5/ct0_pet0_clinical.csv', index_col=0
+    ).values
+    y = pd.read_csv('./../../data/target/target.csv', index_col=0).values
 
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42
     )
-    rf_clf = RandomForestClassifier(random_state=0)
-    X_train_sub, X_test_sub, support = mutual_info(
-        (X_train, X_test, y_train, y_test)
-    )
-    print(support)
+    #rf_clf = RandomForestClassifier(random_state=0)
+    #X_train_sub, X_test_sub, support = mutual_info(
+    #    (X_train, X_test, y_train, y_test)
+    #)
+    #
+    #_, _, support = correlation_threshold((X_train, X_test, y_train, y_test))
+    #print(support)

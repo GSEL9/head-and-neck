@@ -49,7 +49,8 @@ def _update_prelim_results(results, path_tempdir, random_state, *args):
             'best_params': best_params,
             'avg_test_score': avg_test_scores,
             'avg_train_score': avg_train_scores,
-            'best_features': best_features
+            'best_features': best_features,
+            'num_features': np.size(best_features)
         }
     )
     # Write preliminary results to disk.
@@ -71,7 +72,7 @@ def nested_cross_val(*args, verbose=1, score_func=None, **kwargs):
 
     """
     (
-        X, y, estimator, hparam_grid, selector, n_splits,  random_state,
+        X, y, estimator, hparam_grid, selector, n_splits, random_state,
         path_tempdir
     ) = args
 
@@ -83,7 +84,7 @@ def nested_cross_val(*args, verbose=1, score_func=None, **kwargs):
     kfolds = StratifiedKFold(
         n_splits=n_splits, random_state=random_state, shuffle=True
     )
-    train_scores, test_scores = [], []
+    train_scores, test_scores, opt_hparams = [], [], []
     for fold_num, (train_idx, test_idx) in enumerate(kfolds.split(X, y)):
 
         X_train, X_test = X[train_idx], X[test_idx]
@@ -100,15 +101,18 @@ def nested_cross_val(*args, verbose=1, score_func=None, **kwargs):
         )
         # Bookkeeping of best feature subset in each fold.
         feature_votes.update_votes(best_support)
+        opt_hparams.append(best_model.get_params())
         train_scores.append(train_score), test_scores.append(test_score)
 
-    # NOTE: Maybe necessary to include alternative approach in multi_intersect.
-    results = _update_prelim_results(
-        results, path_tempdir, random_state, estimator, selector,
-        best_model.get_params(), np.mean(test_scores), np.mean(train_scores),
-        feature_votes.major_votes
+    # NOTE: Obtaining a different set of hparams for each fold. Selecting mode
+    # of hparams as opt hparam settings.
+    mode_hparams = max(opt_hparams, key=opt_hparams.count)
+
+    end_results = _update_prelim_results(
+        results, path_tempdir, random_state, estimator, selector, mode_hparams,
+        np.mean(test_scores), np.mean(train_scores), feature_votes.major_votes
     )
-    return results
+    return end_results
 
 
 def grid_search_cv(*args, score_func=None, n_jobs=1, verbose=0, **kwargs):
@@ -122,7 +126,11 @@ def grid_search_cv(*args, score_func=None, n_jobs=1, verbose=0, **kwargs):
     for combo_num, hparams in enumerate(hparam_grid):
 
         # Setup:
-        model = estimator(**hparams, random_state=random_state)
+        try:
+            model = estimator(**hparams, random_state=random_state)
+        except:
+            model = estimator(**hparams)
+
         feature_votes = feature_selection.FeatureVotings(nfeatures=X.shape[1])
 
         # Inner cross-validation loop.
@@ -151,7 +159,10 @@ def grid_search_cv(*args, score_func=None, n_jobs=1, verbose=0, **kwargs):
         if np.mean(test_scores) > best_test_score:
             best_test_score = np.mean(test_scores)
             best_support = feature_votes.consensus_votes
-            best_model = estimator(**hparams, random_state=random_state)
+            try:
+                best_model = estimator(**hparams, random_state=random_state)
+            except:
+                best_model = estimator(**hparams)
 
     return best_model, best_support
 

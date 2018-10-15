@@ -32,7 +32,7 @@ class PostProcessor:
         }
 
         # NOTE:
-        self._steps = None
+        self.dropped_cols = {}
 
     def rename_columns(self, labels=None, add_extend=None):
 
@@ -57,11 +57,12 @@ class PostProcessor:
 
         if id_col is not None:
 
-            for feature_set in self.data.values():
+            for key, feature_set in self.data.items():
 
                 feature_set.index = feature_set.loc[:, id_col]
                 if id_col in feature_set.columns:
                     feature_set.drop(id_col, axis=1, inplace=True)
+                    self.dropped_cols['{}_identifier'.format(key)] = id_col
 
         # Check matching identifier.
         if target_id is not None:
@@ -86,20 +87,41 @@ class PostProcessor:
 
     def filter_columns(self, columns=None):
 
-        for feature_set in self.data.values():
+        for key, feature_set in self.data.items():
 
             # Drop default columns.
             if columns is None:
 
-                columns = []
+                _cols = []
                 for label in self.DROP_COLUMNS:
-                    columns.extend(
-                        list(feature_set.filter(regex=label).columns)
-                    )
-            feature_set.drop(columns, axis=1, inplace=True)
+                    _cols.extend(list(feature_set.filter(regex=label).columns))
+
+                feature_set.drop(_cols, axis=1, inplace=True)
+                self.dropped_cols['{}_filtered'.format(key)] = _cols
+
+                if self.verbose > 0:
+                    print('Dropped {} default columns'.format(len(_cols)))
+            else:
+                feature_set.drop(columns, axis=1, inplace=True)
+                self.dropped_cols['{}_filtered'.format(key)] = columns
+
+                if self.verbose > 0:
+                    print('Dropped columns: {}'.format(len(columns)))
+
+        return self
+
+    def filter_constant_features(self):
+
+        for key, data in self.data.items():
+
+            filtered = data.loc[:, data.apply(pd.Series.nunique) != 1]
+            const_cols = np.setdiff1d(data.columns, filtered.columns)
+            data.drop(const_cols, axis=1, inplace=True)
+
+            self.dropped_cols['{}_constant'.format(key)] = const_cols
 
             if self.verbose > 0:
-                print('Dropped columns including: {}'.format(self.DROP_COLUMNS))
+                print('Dropped constant columns: {}'.format(len(const_cols)))
 
         return self
 
@@ -115,9 +137,53 @@ class PostProcessor:
 
             return self
 
+    def drop_correlated(self, thresh=0.95):
+
+        for key, data in self.data.items():
+
+            if self.verbose > 0:
+                _, num_org_feats = np.shape(data)
+
+            # Create correlation matrix.
+            corr_mat = data.corr().abs()
+
+            # Select upper triangle of correlation matrix.
+            upper = corr_mat.where(
+                np.triu(np.ones(corr_mat.shape), k=1).astype(np.bool)
+            )
+            # Find index of feature columns with correlation > thresh.
+            corr_cols = [
+                col for col in upper.columns if any(upper[col] > thresh)
+            ]
+            data.drop(corr_cols, axis=1, inplace=True)
+
+            if self.verbose > 0:
+                if len(corr_cols) == 0:
+                    print('Num dropped corr columns: {}'.format(0))
+                else:
+                    print('Num dropped corr columns: {}'.format(len(corr_cols)))
+
+            self.dropped_cols['{}_correlated'.format(key)] = corr_cols
+            self.dropped_cols['col_correlated_thresh'] = thresh
+
+        return self
+
 
 if __name__ == '__main__':
 
-    path_pet_features = './../../data/outputs/pet_feature_extraction/raw_pet_features1.csv'
-    post_prep = PostProcessor([path_pet_features])
-    post_prep.check_features()
+    import os
+
+    path_to_dir = './../../data/prepped/discr_ct/'
+    path_to_files = [
+        os.path.join(path_to_dir, path_to_file)
+        for path_to_file in os.listdir(path_to_dir)
+    ]
+    post_prep = PostProcessor(path_to_files, verbose=1)
+
+    #for data in post_prep.data.values():
+    #    print(np.shape(data))
+
+    post_prep.drop_correlated(thresh=0.95)
+
+    #for data in post_prep.data.values():
+    #    print(np.shape(data))
