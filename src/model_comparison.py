@@ -52,10 +52,15 @@ def model_comparison(*args, verbose=1, score_func=None, n_jobs=None, **kwargs):
     results = []
     for estimator_name, estimator in estimators.items():
 
+        print('Running estimator: {}\n{}'.format(estimator.__name__, '-' * 30))
+
         # Setup hyperparameter grid.
         hparam_grid = ParameterGrid(estimator_params[estimator_name])
 
         for selector_name, selector_func in selectors.items():
+
+            print('Running selector: {}\n{}'.format(selector_name, '-' * 30))
+
             selector = {
                 'name': selector_name, 'func': selector_func,
                 'params': selector_params[selector_name]
@@ -92,83 +97,72 @@ if __name__ == '__main__':
     from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
     from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
     from sklearn.neural_network import MLPClassifier
-    from skrebate import ReliefF
-
-    # NB ERROR:
-    # For imbalanced datasets, the Average Precision metric is sometimes a
-    # better alternative to the AUROC. The AP score is the area under the precision-recall curve.
-    # https://stats.stackexchange.com/questions/222558/classification-evaluation-metrics-for-highly-imbalanced-data
-    # REF: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4403252/
     from sklearn.metrics import roc_auc_score
-    from sklearn.metrics import cohen_kappa_score
 
     df_X = pd.read_csv(
-        './../../data/to_analysis/lbp/ct0_pet4_clinical.csv', index_col=0
+        './../../data/to_analysis/squareroot_/ct3_pet0_clinical.csv',
+        index_col=0
     )
-    df_y = pd.read_csv('./../../data/to_analysis/target.csv', index_col=0)
     X = df_X.values
-    y = np.squeeze(df_y.values)
 
-    # TODO: Time one
+    df_y_pfs = pd.read_csv(
+        './../../data/to_analysis/target_pfs.csv', index_col=0
+    )
+    y = np.squeeze(df_y_pfs.values)
 
-    n_splits = 5
-    random_states = np.arange(50)
+    n_splits = 4
+    random_states = np.arange(5)
 
+
+    # TODO:
+    # * Run PLSR, LogReg, LDA and AdaBoost across all discr and filter combos
+    #   with Relieff, LogReg1 and RF permutation importance.
     estimators = {
-        'logreg_l1': LogisticRegression,
-        #'logreg_l2': LogisticRegression,
+        'logreg': LogisticRegression,
         #'rf': RandomForestClassifier,
         #'knn': KNeighborsClassifier,
-        #'adaboost': AdaBoostClassifier,
+        'adaboost': AdaBoostClassifier,
         #'dtree': DecisionTreeClassifier,
         #'gaussianb': GaussianNB,
         #'svc': SVC,
         #'linsvc': LinearSVC,
         #'mlp': MLPClassifier,
 
-        # TypeError: 1D weights expected when shapes of a and weights differ.
-        # Error is linked to numpy.
-        #'lda': LinearDiscriminantAnalysis,
-
-        # NB: QDA reports colinear variables. Multicollinearity means that your
-        # predictors are correlated. Why is this bad? Because LDA, like
-        # regression techniques involves computing a matrix inversion, which is
-        # inaccurate if the determinant is close to 0 (i.e. two or more
-        # variables are almost a linear combination of each other
+        # NB: Reports colinear variables.
+        'lda': LinearDiscriminantAnalysis,
+        # NB: Reports colinear variables.
         #'qda': QuadraticDiscriminantAnalysis,
-
-        # WARNING: warnings.warn('Y residual constant at iteration %s' % k)
-        #'pls': PLSRegression,
+        # NB: warnings.warn('Y residual constant at iteration %s' % k)
+        'pls': PLSRegression,
 
         # ERROR: Wrong number of columns in X. Reshape your data.
         #'mars': Earth,
     }
     hparams = {
         'logreg': {
-            'C': [0.0001, 0.001,0.005, 0.01,0.05, 0.1, 1.0, 10.0, 100.0, 1000.0],
-            'fit_intercept': [True], 'solver': ['liblinear'],
+            'C': [0.001, 0.005, 0.01, 0.05, 0.1, 1.0, 10.0, 100.0, 1000.0],
+            'solver': ['liblinear'],
             'penalty': ['l1', 'l2'], 'class_weight': ['balanced'],
         },
         'rf': {
-            'n_estimators': [5, 10, 20, 100, 500],
-            'max_depth': [10, 50, 100, 500, 1000],
+            'n_estimators': [5, 50, 100, 150],
+            'max_depth': [10, 50, 100, 500, None],
         },
         'knn': {
-            'leaf_size': [10, 30, 50],
+            'leaf_size': [10, 20, 30, 40],
             'n_neighbors': [2, 5, 10, 15, 20]
         },
         'adaboost': {
-            'learning_rate': [0.05, 0.5, 1, 2, 3],
-            'n_estimators': [100, 500, 1000]
+            'base_estimator': [LogisticRegression(class_weight='balanced')],
+            'learning_rate': [0.05, 0.5, 1],
+            'n_estimators': [5, 50, 100, 500, 1000],
         },
         'dtree': {
-            'max_depth': [10, 50, 100, 500, 1000],
+            'max_depth': [10, 50, 100, 500, None],
             'class_weight': ['balanced']
         },
-        'gaussianb': {},
         'lda': {
-            'solver' : ['lsqr'], 'shrinkage': [0.1, 0.5, 0.8],
-            'priors': [0.776,0.224], 'n_components': [5, 10, 20, 30],
+            'n_components': [1, 10, 50, 100],
             'tol': [0.0001, 0.00001, 0.001, 0.01]
         },
         'qda': {
@@ -179,63 +173,82 @@ if __name__ == '__main__':
         'mlp': {
             'hidden_layer_sizes': [5, 10, 50, 100, 150, 200],
             'alpha': [0.00001, 0.0001, 0.001, 0.01, 0.1],
-            'tol': [0.0001, 0.00001, 0.001, 0.01], 'max_iter': [300]
+            'tol': [0.0001, 0.00001, 0.001, 0.01],
+            'max_iter': [300]
         },
         'mars': {
-            'penalty' : [0.01, 0.05, 0.1, 0.5], 'minspan_alpha' : [1, 3, 5, 10]
+            'penalty' : [0.01, 0.05, 0.1, 0.5],
+            'minspan_alpha' : [1, 3, 5, 10]
         },
         'pls': {
-            'n_components': [1, 10, 100, 500, 1000], 'tol' : [1e-6, 1e-5, 1e-3],
+            'n_components': [1, 10, 50, 100],
+            'tol': [0.0001, 0.00001, 0.001, 0.01],
             'scale': [False]
         },
         'svc': {
-            'class_weight': ['balanced'], 'gamma': [0.001, 0.05, 0.1, 0.5],
-            'C': [0.0001, 0.001, 0.01, 0.1, 1.0, 10.0, 100.0, 1000.0],
+            'class_weight': ['balanced'],
+            'gamma': [0.001, 0.05, 0.1, 0.5],
+            'C': [0.001, 0.01, 0.1, 1.0, 10.0],
         },
         'linsvc': {
-            'dual': [False], 'class_weight': ['balanced'],
-            'C': [0.0001, 0.001, 0.01, 0.1, 1.0, 10.0, 100.0, 1000.0],
+            'dual': [False],
+            'class_weight': ['balanced'],
+            'C': [0.001, 0.01, 0.1, 1.0, 10.0],
             'tol': [0.00001, 0.0001, 0.001, 0.1, 1]
         },
     }
+
+    # NOTE:
+    # * Variance threshold may produce colinear features.
+    # * Random forest may fit to noise without any FS.
+    # * If model performing worse than average: probably adjusts to noise.
+    # * How about combining AdaBoostClassifier with a GridSearchCV of
+    #   LogisticRegression in a meta classifier?
+
     selectors = {
         #'dummy': feature_selection.dummy,
-        'corr_thresh': feature_selection.correlation_threshold,
-        'var_thresh': feature_selection.variance_threshold,
-        'logregl1': feature_selection.forward_floating,
-        'relieff': feature_selection.relieff,
-        'sff': feature_selection.forward_floating,
+        #'var_thresh': feature_selection.variance_threshold,
+        #'ff_logregl1': feature_selection.forward_floating,
+        #'ff_logregl2': feature_selection.forward_floating,
+        'rf_permut_imp': feature_selection.permutation_importance,
+        #'relieff': feature_selection.relieff,
+        #'ff_rf': feature_selection.forward_floating,
         # ERROR ANOVAF: Reports constant features.
         #'anovaf': feature_selection.anova_fvalue,
-        'mutual_info': feature_selection.mutual_info,
-        'rf_permut_imp': feature_selection.permutation_importance
+        #'mutual_info': feature_selection.mutual_info,
     }
     selector_params = {
-        'dummy': {},
-        'sff': {
+        'var_thresh': {'alpha': 0.05},
+        'logregl1': {
+            'model': LogisticRegression(penalty='l1', class_weight='balanced'),
+            'k': 10, 'cv': 5, 'scoring': 'roc_auc'
+        },
+
+        'ff_rf': {
             'model': RandomForestClassifier(
                 n_estimators=50, random_state=0, class_weight='balanced'
             ),
             'k': 10, 'cv': 2, 'scoring': 'roc_auc'
         },
-        'relieff': {'k': 10, 'n_neighbors': 5},
-        'var_thresh': {'alpha': 0.05},
+        'relieff': {'k': 30, 'n_neighbors': 5},
         'anovaf': {'alpha': 0.05},
         'mutual_info': {'n_neighbors': 5, 'thresh': 0.05},
-        'logregl1': {
-            'model': LogisticRegression(penalty='l1', class_weight='balanced'),
-            'k': 10, 'cv': 5, 'scoring': 'accuracy'
+
+        'logregl2': {
+            'model': LogisticRegression(penalty='l2', class_weight='balanced'),
+            'k': 10, 'cv': 5, 'scoring': 'roc_auc'
         },
         'rf_permut_imp': {
             'model': RandomForestClassifier(n_estimators=50, random_state=0),
-            'thresh': 0.05, 'nreps': 2
-        }
+            'thresh': 1e-5, 'nreps': 5
+        },
+        'dummy': {},
     }
     selection_scheme = model_selection.nested_cross_val
+
     #"""
 
-    # TODO: Time single run and multiply with 19 filters * 25 feature sets to
-    # obtain total run time estimate.
+    # TODO:
     start_time = datetime.now()
     results = model_comparison(
         selection_scheme, X, y, estimators, hparams, selectors,
@@ -244,9 +257,10 @@ if __name__ == '__main__':
     print('Execution time: {}'.format(datetime.now() - start_time))
 
     ioutil.write_final_results(
-        './../../data/outputs/model_comparison/ct0_pet0_clinical.csv',
+        './../../data/outputs/model_comparison/lbp/ct0_pet0_clinical.csv',
         results
     )
+    #"""
     """
 
     ref_feature_dir = './../../data/to_analysis'

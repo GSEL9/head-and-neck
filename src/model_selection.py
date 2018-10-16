@@ -41,7 +41,6 @@ def _update_prelim_results(results, path_tempdir, random_state, *args):
         estimator, selector, best_params, avg_test_scores, avg_train_scores,
         best_features
     ) = args
-
     results.update(
         {
             'model': estimator.__name__,
@@ -159,6 +158,7 @@ def grid_search_cv(*args, score_func=None, n_jobs=1, verbose=0, **kwargs):
         if np.mean(test_scores) > best_test_score:
             best_test_score = np.mean(test_scores)
             best_support = feature_votes.consensus_votes
+
             try:
                 best_model = estimator(**hparams, random_state=random_state)
             except:
@@ -197,10 +197,11 @@ def bootstrap_point632plus(*args, verbose=1, score_func=None, **kwargs):
             best_model = estimator(**hparams, random_state=random_state)
             best_support = support
 
-    return _update_prelim_results(
+    end_results = _update_prelim_results(
         results, path_tempdir, random_state, estimator, selector,
         best_model.get_params(), avg_test_error, avg_train_error, best_support
     )
+    return end_results
 
 
 def _boot_validation(*args, score_func=None, n_jobs=1, verbose=0, **kwargs):

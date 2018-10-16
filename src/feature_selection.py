@@ -241,6 +241,8 @@ def forward_floating(data, scoring=None, model=None, k=3, cv=10):
     return X_train_std[:, support], X_test_std[:, support], support
 
 
+# ERROR: May be tath support is 2D resulting in X data being a vector, and
+# not an array.
 def permutation_importance(data, model=None, thresh=0, nreps=100):
     """A wrapper of mlxtend feature importance permutation algorithm.
 
@@ -260,7 +262,15 @@ def permutation_importance(data, model=None, thresh=0, nreps=100):
         num_rounds=nreps, seed=0
     )
     # NOTE: Retain features contributing above threshold to model performance.
+
     support = np.squeeze(np.argwhere(imp > thresh))
+
+    if np.ndim(support) < 1:
+        support = np.array([support], dtype=int)
+
+    print('support')
+    print(support)
+    print()
 
     return X_train_std[:, support], X_test_std[:, support], support
 
