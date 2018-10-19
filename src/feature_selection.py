@@ -27,6 +27,10 @@ from mlxtend.evaluate import feature_importance_permutation
 from mlxtend.feature_selection import SequentialFeatureSelector
 
 
+SEED = 0
+METRIC = 'accuracy'
+
+
 class FeatureVotings:
 
     def __init__(self, nfeatures=None, thresh=1):
@@ -69,7 +73,7 @@ class FeatureVotings:
     def update_votes(self, support):
         """Update votes per feature in derived support."""
 
-        # Updated at instantiation only.
+        # NOTE: Updated at instantiation only.
         if self.feature_votes is None:
             self.feature_votes = {num: 0 for num in range(self.nfeatures)}
 
@@ -151,7 +155,6 @@ def correlation_threshold(data, alpha=0.05):
     return X_train_std[:, support], X_test_std[:, support], support
 
 
-# If you standardize them to have unit variance before, this filtering of course makes no sense
 def variance_threshold(data, alpha=0.05):
     """A wrapper of scikit-learn VarianceThreshold."""
 
@@ -195,11 +198,13 @@ def mutual_info(data, n_neighbors=3, thresh=0.05):
 
     X_train, X_test, y_train, y_test = data
 
+    global SEED
+
     # Z-scores.
     X_train_std, X_test_std = utils.train_test_z_scores(X_train, X_test)
 
     mut_info = feature_selection.mutual_info_classif(
-        X_train_std, y_train, n_neighbors=n_neighbors, random_state=0
+        X_train_std, y_train, n_neighbors=n_neighbors, random_state=SEED
     )
     # NOTE: Retain features contributing above threshold to model performance.
     support = np.squeeze(np.argwhere(mut_info > thresh))
@@ -269,9 +274,10 @@ def permutation_importance(data, model=None, thresh=0, nreps=5):
     """A wrapper of mlxtend feature importance permutation algorithm.
 
     """
-    _metric = 'accuracy'
 
     X_train, X_test, y_train, y_test = data
+
+    global METRIC, SEED
 
     # Z-scores.
     X_train_std, X_test_std = utils.train_test_z_scores(X_train, X_test)
@@ -280,54 +286,12 @@ def permutation_importance(data, model=None, thresh=0, nreps=5):
 
     imp, _ = feature_importance_permutation(
         predict_method=model.predict, X=X_test_std, y=y_test,
-        metric=_metric,
-        num_rounds=nreps, seed=0
+        metric=METRIC, num_rounds=nreps, seed=SEED
     )
     support = np.squeeze(np.where(imp > thresh))
 
+    # NB: Default mechanism is to include all features is none were selected.
+    if np.size(support) < 1:
+        support = np.arange(X_train.shape[1], dtype=int)
+
     return X_train_std[:, support], X_test_std[:, support], support
-
-
-if __name__ == '__main__':
-    # NOTE: quantified the stability of a method as the similarity between the
-    # results obtained by the same feature selection method, when applied on
-    # the two non-overlapping partitions
-
-    from sklearn.datasets import load_breast_cancer
-    from sklearn.model_selection import train_test_split
-    from sklearn.metrics import roc_auc_score
-
-    cancer = load_breast_cancer()
-
-    # NB: roc_auc_score requires binary <int> target values.
-    #y = cancer.target
-    #X = cancer.data
-
-    threshold = 0.95
-
-    df_X = pd.read_csv(
-        './../../data/to_analysis/squareroot_/ct3_pet0_clinical.csv',
-        index_col=0
-    )
-    # Create correlation matrix.
-    corr_mat = df_X.corr().abs()
-
-    # Select upper triangle of correlation matrix.
-    upper = corr_mat.where(
-        np.triu(np.ones(np.shape(corr_mat)), k=1).astype(np.bool)
-    )
-    # Find index of feature columns with correlation > thresh.
-    corr_cols = [
-        col for col in upper.columns if any(upper[col] > threshold)
-    ]
-    #df_X.drop(df_X.columns[corr_cols], axis=1, inplace=True)
-    print(corr_cols)
-
-
-    #rf_clf = RandomForestClassifier(random_state=0)
-    #X_train_sub, X_test_sub, support = mutual_info(
-    #    (X_train, X_test, y_train, y_test)
-    #)
-    #
-    #_, _, support = correlation_threshold((X_train, X_test, y_train, y_test))
-    #print(support)

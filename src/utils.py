@@ -120,7 +120,7 @@ def scale_fit_predict(*args, score_func=None, **kwargs):
     fitting.
 
     Args:
-        model ():
+        model (sklearn.estimator): Learning model.
         X_train (array-like): Training set.
         X_test (array-like): Test set.
         y_train (array-like): Target training set.

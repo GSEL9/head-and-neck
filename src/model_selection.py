@@ -4,6 +4,7 @@
 #
 
 """
+Frameworks for performing model selection.
 """
 
 __author__ = 'Severin Langberg'
@@ -13,26 +14,14 @@ __email__ = 'langberg91@gmail.com'
 import os
 import utils
 import ioutil
-import shutil
-import logging
-import operator
-
 import model_selection
 import feature_selection
 
 import numpy as np
 import pandas as pd
 
-from datetime import datetime
 from collections import OrderedDict
-from multiprocessing import cpu_count
-
-from sklearn.base import clone
 from sklearn.externals import joblib
-from sklearn.metrics import roc_auc_score
-from sklearn.preprocessing import StandardScaler
-from sklearn.metrics.scorer import check_scoring
-from sklearn.model_selection import train_test_split
 from sklearn.model_selection import StratifiedKFold
 
 
@@ -64,11 +53,17 @@ def _update_prelim_results(results, path_tempdir, random_state, *args):
     return results
 
 
-def nested_cross_val(*args, verbose=1, score_func=None, **kwargs):
-    """A nested cross validation scheme comprising (1) an inner cross
-    validation loop to tune hyperparameters and select the best model, (2) an
-    outer cross validation loop to evaluate the model selected by the inner
-    cross validation scheme.
+def nested_cross_val(*args, verbose=1, n_jobs=None, score_func=None, **kwargs):
+    """A nested cross validation scheme inclusive feature selection.
+
+    Args:
+        X (array-like):
+        y (array-like)
+
+    Kwargs:
+
+    Returns:
+        (dict):
 
     """
     (
@@ -94,7 +89,7 @@ def nested_cross_val(*args, verbose=1, score_func=None, **kwargs):
         # Determine best model and feature subset.
         best_model, best_support = grid_search_cv(
             estimator, hparam_grid, selector, X_train, y_train, n_splits,
-            random_state, verbose=verbose, score_func=score_func
+            random_state, verbose=verbose, score_func=score_func, n_jobs=n_jobs
         )
         train_score, test_score = utils.scale_fit_predict(
             best_model, X_train[:, best_support], X_test[:, best_support],
@@ -116,7 +111,7 @@ def nested_cross_val(*args, verbose=1, score_func=None, **kwargs):
     return end_results
 
 
-def grid_search_cv(*args, score_func=None, n_jobs=1, verbose=0, **kwargs):
+def grid_search_cv(*args, score_func=None, n_jobs=None, verbose=0, **kwargs):
     """Exhaustive search in estimator hyperparameter space to derive optimal
     combination with respect to scoring function.
 
@@ -131,16 +126,15 @@ def grid_search_cv(*args, score_func=None, n_jobs=1, verbose=0, **kwargs):
             model = estimator(**hparams, random_state=random_state)
         except:
             model = estimator(**hparams)
-        # NOTE: Use thresh = n_splits in case all features are selected in each
-        # round by default mechanism.
+
         feature_votes = feature_selection.FeatureVotings(
             nfeatures=X.shape[1], thresh=n_splits-1
         )
-        # Inner cross-validation loop.
+        # Inner cross-validation loop: Determine average model performance for
+        # each hparam combo.
         kfolds = StratifiedKFold(
             n_splits=n_splits, random_state=random_state, shuffle=True
         )
-        # Determine average model performance for each hparam combo.
         train_scores, test_scores = [], []
         for num, (train_idx, test_idx) in enumerate(kfolds.split(X, y)):
 
@@ -148,11 +142,9 @@ def grid_search_cv(*args, score_func=None, n_jobs=1, verbose=0, **kwargs):
             y_train, y_test = y[train_idx], y[test_idx]
 
             # NOTE: Standardizing in feature sel function.
-            start_time = datetime.now()
             X_train_sub, X_test_sub, support = selector['func'](
                 (X_train, X_test, y_train, y_test), **selector['params']
             )
-            #print('Feature selection completed in: {}'.format(datetime.now() - start_time))
             train_score, test_score = utils.scale_fit_predict(
                 model, X_train_sub, X_test_sub, y_train, y_test,
                 score_func=score_func

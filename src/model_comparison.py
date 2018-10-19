@@ -36,8 +36,8 @@ def model_comparison(*args, verbose=1, score_func=None, n_jobs=None, **kwargs):
 
     """
     (
-        comparison_scheme, X, y, estimators, estimator_params,
-        selectors, selector_params, random_states, n_splits
+        comparison_scheme, X, y, estimators, estimator_params, selectors,
+        fs_params, random_states, n_splits
     ) = args
 
     global TMP_RESULTS_DIR
@@ -57,15 +57,14 @@ def model_comparison(*args, verbose=1, score_func=None, n_jobs=None, **kwargs):
         # Setup hyperparameter grid.
         hparam_grid = ParameterGrid(estimator_params[estimator_name])
 
-        for selector_name, selector_func in selectors.items():
+        for fs_name, fs_func in selectors.items():
 
-            print('Running selector: {}\n{}'.format(selector_name, '-' * 30))
+            print('Running selector: {}\n{}'.format(fs_name, '-' * 30))
 
             selector = {
-                'name': selector_name, 'func': selector_func,
-                'params': selector_params[selector_name]
+                'name': fs_name, 'func': fs_func, 'params': fs_params[fs_name]
             }
-            # Repeated experimental results.
+            # Repeating experiments.
             results.extend(
                 joblib.Parallel(
                     n_jobs=n_jobs, verbose=verbose
@@ -73,7 +72,7 @@ def model_comparison(*args, verbose=1, score_func=None, n_jobs=None, **kwargs):
                     joblib.delayed(comparison_scheme)(
                         X, y, estimator, hparam_grid, selector, n_splits,
                         random_state, path_tempdir, verbose=verbose,
-                        score_func=score_func
+                        score_func=score_func, n_jobs=n_jobs
                     ) for random_state in random_states
                 )
             )
@@ -84,20 +83,18 @@ def model_comparison(*args, verbose=1, score_func=None, n_jobs=None, **kwargs):
 
 
 if __name__ == '__main__':
-    import pandas as pd
     import numpy as np
-    from sklearn.linear_model import LogisticRegression
-    from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
-    from sklearn.cross_decomposition import PLSRegression
+    import pandas as pd
+
     from sklearn.svm import SVC, LinearSVC
-    from pyearth import Earth
-    from sklearn.tree import DecisionTreeClassifier
-    from sklearn.neighbors import KNeighborsClassifier
+    from sklearn.metrics import roc_auc_score
     from sklearn.naive_bayes import GaussianNB
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.cross_decomposition import PLSRegression
+    from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
     from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
     from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
-    from sklearn.neural_network import MLPClassifier
-    from sklearn.metrics import roc_auc_score
+
 
     df_X = pd.read_csv(
         './../../data/to_analysis/squareroot_/ct3_pet0_clinical.csv',
@@ -110,31 +107,25 @@ if __name__ == '__main__':
     )
     y = np.squeeze(df_y_pfs.values)
 
-    n_splits = 2
-    random_states = np.arange(5)
-
-    # NB NB NB NB NB NB NB NB NB NB NB
-    # * Revisit model comparison procedure to check validity of each step. Pay
-    #   particular attention to steps in retaining feature subsets.
-
-
-    # NOTE:
-    # Errors in A analysis:
+    # NOTE: Errors in A analysis:
     # * Did not dummy encode clinical data.
 
+    # Number of experiments
+    random_states = np.arange(5)
+
     estimators = {
-        #'lda': LinearDiscriminantAnalysis,
-        #'logreg': LogisticRegression,
+        # NB: May report colinear variables.
+        'lda': LinearDiscriminantAnalysis,
+        'logreg': LogisticRegression,
         # NB: warnings.warn('Y residual constant at iteration %s' % k)
-        #'pls': PLSRegression,
+        'pls': PLSRegression,
         'adaboost': AdaBoostClassifier,
-        # NOTE: May report colinear vars.
-        #'gnb': GaussianNB,
-        #'svc': SVC,
-        #'lin_svc': LinearSVC,
+        'gnb': GaussianNB,
+        'svc': SVC,
+        'lin_svc': LinearSVC,
     }
 
-    # NOTE: Hparam setup.
+    # Hparam setup:
     # Use same param settings across models attempting to ensure `fair` grounds
     # for comparison.
     K, CV, SEED = 20, 4, 0
@@ -188,13 +179,13 @@ if __name__ == '__main__':
     }
 
     selectors = {
-        #'rf_permut_imp': feature_selection.permutation_importance,
-        #'ff_logregl1': feature_selection.forward_floating,
-        #'ff_logregl2': feature_selection.forward_floating,
-        #'ff_rf': feature_selection.forward_floating,
+        'rf_permut_imp': feature_selection.permutation_importance,
+        'ff_logregl1': feature_selection.forward_floating,
+        'ff_logregl2': feature_selection.forward_floating,
+        'ff_rf': feature_selection.forward_floating,
         'var_thresh': feature_selection.variance_threshold,
-        #'relieff': feature_selection.relieff,
-        #'mutual_info': feature_selection.mutual_info,
+        'relieff': feature_selection.relieff,
+        'mutual_info': feature_selection.mutual_info,
     }
 
     selector_params = {
@@ -212,13 +203,13 @@ if __name__ == '__main__':
 
     selection_scheme = model_selection.nested_cross_val
 
-    #"""
+    """
 
     # TODO:
     start_time = datetime.now()
     results = model_comparison(
         selection_scheme, X, y, estimators, hparams, selectors,
-        selector_params, random_states, n_splits, score_func=roc_auc_score
+        selector_params, random_states, CV, score_func=roc_auc_score
     )
     print('Execution time: {}'.format(datetime.now() - start_time))
 
@@ -227,8 +218,8 @@ if __name__ == '__main__':
     #    './../../data/outputs/model_comparison/lbp/ct0_pet0_clinical.csv',
     #    results
     #)
-    #"""
     """
+    #"""
 
     ref_feature_dir = './../../data/to_analysis'
     ref_results_dir = './../../data/outputs/model_comparison'
@@ -265,4 +256,4 @@ if __name__ == '__main__':
             )
             ioutil.write_final_results(path_results, results)
             print('Saving results to: {}'.format(path_results))
-    """
+    #"""
