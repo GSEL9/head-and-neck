@@ -110,140 +110,106 @@ if __name__ == '__main__':
     )
     y = np.squeeze(df_y_pfs.values)
 
-    n_splits = 4
+    n_splits = 2
     random_states = np.arange(5)
 
+    # NB NB NB NB NB NB NB NB NB NB NB
+    # * Revisit model comparison procedure to check validity of each step. Pay
+    #   particular attention to steps in retaining feature subsets.
 
-    # TODO:
-    # * Run PLSR, LogReg, LDA and AdaBoost across all discr and filter combos
-    #   with Relieff, LogReg1 and RF permutation importance.
-    estimators = {
-        'logreg': LogisticRegression,
-        #'rf': RandomForestClassifier,
-        #'knn': KNeighborsClassifier,
-        'adaboost': AdaBoostClassifier,
-        #'dtree': DecisionTreeClassifier,
-        #'gaussianb': GaussianNB,
-        #'svc': SVC,
-        #'linsvc': LinearSVC,
-        #'mlp': MLPClassifier,
-
-        # NB: Reports colinear variables.
-        'lda': LinearDiscriminantAnalysis,
-        # NB: Reports colinear variables.
-        #'qda': QuadraticDiscriminantAnalysis,
-        # NB: warnings.warn('Y residual constant at iteration %s' % k)
-        'pls': PLSRegression,
-
-        # ERROR: Wrong number of columns in X. Reshape your data.
-        #'mars': Earth,
-    }
-    hparams = {
-        'logreg': {
-            'C': [0.001, 0.005, 0.01, 0.05, 0.1, 1.0, 10.0, 100.0, 1000.0],
-            'solver': ['liblinear'],
-            'penalty': ['l1', 'l2'], 'class_weight': ['balanced'],
-        },
-        'rf': {
-            'n_estimators': [5, 50, 100, 150],
-            'max_depth': [10, 50, 100, 500, None],
-        },
-        'knn': {
-            'leaf_size': [10, 20, 30, 40],
-            'n_neighbors': [2, 5, 10, 15, 20]
-        },
-        'adaboost': {
-            'base_estimator': [LogisticRegression(class_weight='balanced')],
-            'learning_rate': [0.05, 0.5, 1],
-            'n_estimators': [5, 50, 100, 500, 1000],
-        },
-        'dtree': {
-            'max_depth': [10, 50, 100, 500, None],
-            'class_weight': ['balanced']
-        },
-        'lda': {
-            'n_components': [1, 10, 50, 100],
-            'tol': [0.0001, 0.00001, 0.001, 0.01]
-        },
-        'qda': {
-            'tol': [0.0001, 0.00001, 0.001, 0.01],
-            'reg_param': [0.1, 0.5, 0.7, 0.9],
-            'priors': [0.776,0.224]
-        },
-        'mlp': {
-            'hidden_layer_sizes': [5, 10, 50, 100, 150, 200],
-            'alpha': [0.00001, 0.0001, 0.001, 0.01, 0.1],
-            'tol': [0.0001, 0.00001, 0.001, 0.01],
-            'max_iter': [300]
-        },
-        'mars': {
-            'penalty' : [0.01, 0.05, 0.1, 0.5],
-            'minspan_alpha' : [1, 3, 5, 10]
-        },
-        'pls': {
-            'n_components': [1, 10, 50, 100],
-            'tol': [0.0001, 0.00001, 0.001, 0.01],
-            'scale': [False]
-        },
-        'svc': {
-            'class_weight': ['balanced'],
-            'gamma': [0.001, 0.05, 0.1, 0.5],
-            'C': [0.001, 0.01, 0.1, 1.0, 10.0],
-        },
-        'linsvc': {
-            'dual': [False],
-            'class_weight': ['balanced'],
-            'C': [0.001, 0.01, 0.1, 1.0, 10.0],
-            'tol': [0.00001, 0.0001, 0.001, 0.1, 1]
-        },
-    }
 
     # NOTE:
-    # * Variance threshold may produce colinear features.
-    # * Random forest may fit to noise without any FS.
-    # * If model performing worse than average: probably adjusts to noise.
-    # * How about combining AdaBoostClassifier with a GridSearchCV of
-    #   LogisticRegression in a meta classifier?
+    # Errors in A analysis:
+    # * Did not dummy encode clinical data.
+
+    estimators = {
+        #'lda': LinearDiscriminantAnalysis,
+        #'logreg': LogisticRegression,
+        # NB: warnings.warn('Y residual constant at iteration %s' % k)
+        #'pls': PLSRegression,
+        'adaboost': AdaBoostClassifier,
+        # NOTE: May report colinear vars.
+        #'gnb': GaussianNB,
+        #'svc': SVC,
+        #'lin_svc': LinearSVC,
+    }
+
+    # NOTE: Hparam setup.
+    # Use same param settings across models attempting to ensure `fair` grounds
+    # for comparison.
+    K, CV, SEED = 20, 4, 0
+
+    PRIORS = [0.224, 0.776]
+    N_ESTIMATORS = [5, 50, 100, 500, 1000]
+    LEARNINGR_RATE = [0.05, 0.2, 0.5, 0.7, 1]
+    TOL = [1e-7, 1e-5, 0.0001, 0.001, 0.01, 0.1]
+    C = [0.0001, 0.001, 0.005, 0.01, 0.05, 0.1, 1.0, 10.0, 100.0, 1000.0]
+
+    SCORE = 'roc_auc'
+    PENALTY = ['l1', 'l2']
+    CLASS_WEIGHT = ['balanced']
+
+    logreg_l1 = LogisticRegression(
+        penalty='l1', class_weight='balanced', random_state=SEED
+    )
+    logreg_l2 = LogisticRegression(
+        penalty='l2', class_weight='balanced', random_state=SEED
+    )
+    rf_model = RandomForestClassifier(
+        n_estimators=50, class_weight='balanced', random_state=SEED
+    )
+
+    hparams = {
+        'lda': {
+            'n_components': N_ESTIMATORS,
+            'tol': TOL, 'priors': [PRIORS],
+        },
+        'logreg': {
+            'C': C, 'solver': ['liblinear'], 'penalty': PENALTY,
+            'class_weight': CLASS_WEIGHT,
+        },
+        'pls': {
+            'n_components': [5, 30, 70, 100, 150], 'tol': TOL, 'max_iter': [500]
+        },
+        'adaboost': {
+            'base_estimator': [logreg_l2],
+            'learning_rate': LEARNINGR_RATE, 'n_estimators': N_ESTIMATORS,
+        },
+        'svc': {
+            'kernel': ['rbf'], 'C': C, 'gamma': [0.001, 0.01, 0.05, 0.1, 0.2],
+            'cache_size': [30, 50, 70, 200, 300], 'degree': [2, 3],
+            'class_weight': CLASS_WEIGHT
+        },
+        'lin_svc': {
+            'C': C, 'class_weight': CLASS_WEIGHT, 'penalty': PENALTY,
+            'dual': [False], 'tol': TOL,
+        },
+        'gnb': {'priors': [PRIORS]},
+    }
 
     selectors = {
-        #'dummy': feature_selection.dummy,
-        #'var_thresh': feature_selection.variance_threshold,
+        #'rf_permut_imp': feature_selection.permutation_importance,
         #'ff_logregl1': feature_selection.forward_floating,
         #'ff_logregl2': feature_selection.forward_floating,
-        'rf_permut_imp': feature_selection.permutation_importance,
-        #'relieff': feature_selection.relieff,
         #'ff_rf': feature_selection.forward_floating,
-        # ERROR ANOVAF: Reports constant features.
-        #'anovaf': feature_selection.anova_fvalue,
+        'var_thresh': feature_selection.variance_threshold,
+        #'relieff': feature_selection.relieff,
         #'mutual_info': feature_selection.mutual_info,
     }
+
     selector_params = {
+        # Wrapper methods:
+        'rf_permut_imp': {'model': rf_model, 'thresh': 0.0, 'nreps': 1},
+        'ff_rf': {'model': rf_model, 'k': K, 'cv': CV, 'scoring': SCORE},
+        'ff_logregl1': {'model': logreg_l1, 'k': K, 'cv': CV, 'scoring': SCORE},
+        'ff_logregl2': {'model': logreg_l2, 'k': K, 'cv': CV, 'scoring': SCORE
+        },
+        # Filter methods:
         'var_thresh': {'alpha': 0.05},
-        'logregl1': {
-            'model': LogisticRegression(penalty='l1', class_weight='balanced'),
-            'k': 10, 'cv': 5, 'scoring': 'roc_auc'
-        },
-
-        'ff_rf': {
-            'model': RandomForestClassifier(
-                n_estimators=50, random_state=0, class_weight='balanced'
-            ),
-            'k': 10, 'cv': 2, 'scoring': 'roc_auc'
-        },
-        'relieff': {'k': 30, 'n_neighbors': 5},
-        'anovaf': {'alpha': 0.05},
-        'mutual_info': {'n_neighbors': 5, 'thresh': 0.05},
-
-        'logregl2': {
-            'model': LogisticRegression(penalty='l2', class_weight='balanced'),
-            'k': 10, 'cv': 5, 'scoring': 'roc_auc'
-        },
-        'rf_permut_imp': {
-            'model': RandomForestClassifier(n_estimators=50, random_state=0),
-            'thresh': 1e-5, 'nreps': 5
-        },
-        'dummy': {},
+        'relieff': {'k': K, 'n_neighbors': 20},
+        'mutual_info': {'n_neighbors': 20, 'thresh': 0.05},
     }
+
     selection_scheme = model_selection.nested_cross_val
 
     #"""
@@ -256,10 +222,11 @@ if __name__ == '__main__':
     )
     print('Execution time: {}'.format(datetime.now() - start_time))
 
-    ioutil.write_final_results(
-        './../../data/outputs/model_comparison/lbp/ct0_pet0_clinical.csv',
-        results
-    )
+    print(results)
+    #ioutil.write_final_results(
+    #    './../../data/outputs/model_comparison/lbp/ct0_pet0_clinical.csv',
+    #    results
+    #)
     #"""
     """
 
@@ -273,6 +240,7 @@ if __name__ == '__main__':
     df_y = np.squeeze(
         pd.read_csv('./../../data/to_analysis/target.csv', index_col=0).values
     )
+
     for filter_cat in filter_cats:
 
         path_filter_cat_feature_sets = ioutil.relative_paths(
@@ -282,13 +250,19 @@ if __name__ == '__main__':
 
             X = pd.read_csv(path_feature_set, index_col=0).values
 
+            start_time = datetime.now()
+
+            # TODO: Plot a progress bar.
+            # print('Collecting results:')
             results = model_comparison(
                 selection_scheme, X, y, estimators, hparams, selectors,
                 selector_params, random_states, n_splits,
                 score_func=roc_auc_score
             )
+            # TODO: Print collection time.
             path_results = os.path.join(
                 ref_results_dir, filter_cat, os.path.basename(path_feature_set)
             )
             ioutil.write_final_results(path_results, results)
+            print('Saving results to: {}'.format(path_results))
     """

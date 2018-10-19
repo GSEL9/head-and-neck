@@ -22,7 +22,12 @@ from sklearn.preprocessing import StandardScaler
 
 
 def setup_logger(fname='extraction_log.txt'):
-    """Setup logger with info filter."""
+    """Setup logger with info filter.
+
+    Args:
+        fname (str):
+
+    """
 
     # Location of output log file
     log_handler = logging.FileHandler(
@@ -52,6 +57,10 @@ def setup_logger(fname='extraction_log.txt'):
 class LoggingInfoFilter(logging.Filter):
     """A filter that allows messages from specified filter and level INFO and
     up including level WARNING and up from other loggers.
+
+    Args:
+        name (str): Name of logger.
+
     """
 
     def __init__(self, name):
@@ -70,7 +79,15 @@ class LoggingInfoFilter(logging.Filter):
 
 
 def multi_intersect(arrays):
-    """Determines the intersection between multiple sets."""
+    """Determines the intersection between multiple sets.
+
+    Args:
+        arrays (iterable): A set of iterables.
+
+    Returns:
+        (list): Elements intersecting across all arrays.
+
+    """
 
     sets = [set(array) for array in arrays]
     matches = set.intersection(*sets)
@@ -99,8 +116,23 @@ def train_test_z_scores(X_train, X_test):
 
 
 def scale_fit_predict(*args, score_func=None, **kwargs):
+    """Convenience function to produce training and test scores from model
+    fitting.
+
+    Args:
+        model ():
+        X_train (array-like): Training set.
+        X_test (array-like): Test set.
+        y_train (array-like): Target training set.
+        y_test (array-like): Target test set.
+
+    Returns:
+        (tuple): Traning and test scores.
+
+    """
     model, X_train, X_test, y_train, y_test = args
 
+    # Compute Z scores.
     X_train_std, X_test_std = train_test_z_scores(X_train, X_test)
 
     model.fit(X_train_std, y_train)
@@ -133,6 +165,15 @@ class BootstrapOutOfBag:
                 list(set(sample_indicators) - set(train_idx)), dtype=int
             )
             yield train_idx, test_idx
+
+
+def check_support(support):
+
+    if np.ndim(support) > 1:
+        return np.squeeze(support)
+
+    if not isinstance(support, np.ndarray):
+        return np.array(support, dtype=int)
 
 
 @jit

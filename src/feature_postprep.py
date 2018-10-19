@@ -42,7 +42,7 @@ class PostProcessor:
                 feature_set.columns = labels
 
         # Modify column labels with extension.
-        elif add_extend is not None:
+        if add_extend is not None:
 
             for data in self.data.values():
                 new_labels = [
@@ -85,28 +85,62 @@ class PostProcessor:
             self.impute_missing_values()
             #self.check_dtypes(features)
 
-    def filter_columns(self, columns=None):
+    def filter_columns(self, keys=None, columns=None):
 
-        for key, feature_set in self.data.items():
+        # Filter from all columns.
+        if keys is None:
+            for key, feature_set in self.data.items():
 
-            # Drop default columns.
-            if columns is None:
+                # Drop default columns.
+                if columns is None:
 
-                _cols = []
-                for label in self.DROP_COLUMNS:
-                    _cols.extend(list(feature_set.filter(regex=label).columns))
+                    _cols = []
+                    for label in self.DROP_COLUMNS:
+                        _cols.extend(
+                            list(feature_set.filter(regex=label).columns)
+                        )
+                    feature_set.drop(_cols, axis=1, inplace=True)
+                    self.dropped_cols['{}_filtered'.format(key)] = _cols
 
-                feature_set.drop(_cols, axis=1, inplace=True)
-                self.dropped_cols['{}_filtered'.format(key)] = _cols
+                    if self.verbose > 0:
+                        print('Dropped {} default columns'
+                              ''.format(len(_cols)))
+                else:
+                    feature_set.drop(columns, axis=1, inplace=True)
+                    self.dropped_cols['{}_filtered'.format(key)] = columns
 
-                if self.verbose > 0:
-                    print('Dropped {} default columns'.format(len(_cols)))
+                    if self.verbose > 0:
+                        print('Dropped columns: {}'.format(len(columns)))
+
+        # Filter from specified columns.
+        else:
+            if isinstance(keys, (list, tuple)):
+                for key in keys:
+
+                    # Drop default columns.
+                    if columns is None:
+
+                        _cols = []
+                        for label in self.DROP_COLUMNS:
+                            _cols.extend(
+                                list(feature_set.filter(regex=label).columns)
+                            )
+                        self.data[key].drop(_cols, axis=1, inplace=True)
+                        self.dropped_cols['{}_filtered'.format(key)] = _cols
+
+                        if self.verbose > 0:
+                            print('Dropped {} default columns'
+                                  ''.format(len(_cols)))
+                    else:
+                        self.data[key].drop(columns, axis=1, inplace=True)
+                        self.dropped_cols['{}_filtered'.format(key)] = columns
+
+                        if self.verbose > 0:
+                            print('Dropped columns: {}'.format(len(columns)))
+
             else:
-                feature_set.drop(columns, axis=1, inplace=True)
-                self.dropped_cols['{}_filtered'.format(key)] = columns
-
-                if self.verbose > 0:
-                    print('Dropped columns: {}'.format(len(columns)))
+                raise ValueError('Keys should be <list> or <tuple>, not {}'
+                                 ''.format(type(keys)))
 
         return self
 

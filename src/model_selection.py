@@ -23,6 +23,7 @@ import feature_selection
 import numpy as np
 import pandas as pd
 
+from datetime import datetime
 from collections import OrderedDict
 from multiprocessing import cpu_count
 
@@ -77,8 +78,9 @@ def nested_cross_val(*args, verbose=1, score_func=None, **kwargs):
 
     # Setup:
     results = {'experiment_id': random_state}
-    feature_votes = feature_selection.FeatureVotings(nfeatures=X.shape[1])
-
+    feature_votes = feature_selection.FeatureVotings(
+        nfeatures=X.shape[1], thresh=n_splits-1
+    )
     # Outer cross-validation loop.
     kfolds = StratifiedKFold(
         n_splits=n_splits, random_state=random_state, shuffle=True
@@ -129,9 +131,11 @@ def grid_search_cv(*args, score_func=None, n_jobs=1, verbose=0, **kwargs):
             model = estimator(**hparams, random_state=random_state)
         except:
             model = estimator(**hparams)
-
-        feature_votes = feature_selection.FeatureVotings(nfeatures=X.shape[1])
-
+        # NOTE: Use thresh = n_splits in case all features are selected in each
+        # round by default mechanism.
+        feature_votes = feature_selection.FeatureVotings(
+            nfeatures=X.shape[1], thresh=n_splits-1
+        )
         # Inner cross-validation loop.
         kfolds = StratifiedKFold(
             n_splits=n_splits, random_state=random_state, shuffle=True
@@ -144,9 +148,11 @@ def grid_search_cv(*args, score_func=None, n_jobs=1, verbose=0, **kwargs):
             y_train, y_test = y[train_idx], y[test_idx]
 
             # NOTE: Standardizing in feature sel function.
+            start_time = datetime.now()
             X_train_sub, X_test_sub, support = selector['func'](
                 (X_train, X_test, y_train, y_test), **selector['params']
             )
+            #print('Feature selection completed in: {}'.format(datetime.now() - start_time))
             train_score, test_score = utils.scale_fit_predict(
                 model, X_train_sub, X_test_sub, y_train, y_test,
                 score_func=score_func
@@ -157,14 +163,14 @@ def grid_search_cv(*args, score_func=None, n_jobs=1, verbose=0, **kwargs):
 
         if np.mean(test_scores) > best_test_score:
             best_test_score = np.mean(test_scores)
-            best_support = feature_votes.consensus_votes
-
+            best_support = feature_votes.major_votes #consensus_votes
             try:
                 best_model = estimator(**hparams, random_state=random_state)
             except:
                 best_model = estimator(**hparams)
 
     return best_model, best_support
+
 
 
 def bootstrap_point632plus(*args, verbose=1, score_func=None, **kwargs):

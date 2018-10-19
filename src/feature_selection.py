@@ -144,6 +144,10 @@ def correlation_threshold(data, alpha=0.05):
     selector.fit(X_train, y_train)
     support = selector.get_support(indices=True)
 
+    # NB: Default mechanism is to include all features is none were selected.
+    if np.size(support) < 1:
+        support = np.arange(X_train.shape[1], dtype=int)
+
     return X_train_std[:, support], X_test_std[:, support], support
 
 
@@ -161,6 +165,10 @@ def variance_threshold(data, alpha=0.05):
     selector.fit(X_train, y_train)
     support = selector.get_support(indices=True)
 
+    # NB: Default mechanism is to include all features is none were selected.
+    if np.size(support) < 1:
+        support = np.arange(X_train.shape[1], dtype=int)
+
     return X_train_std[:, support], X_test_std[:, support], support
 
 
@@ -174,6 +182,10 @@ def anova_fvalue(data, alpha=0.05):
 
     _, pvalues = feature_selection.f_classif(X_train, y_train)
     support = np.squeeze(np.where(pvalues <= alpha))
+
+    # NB: Default mechanism is to include all features is none were selected.
+    if np.size(support) < 1:
+        support = np.arange(X_train.shape[1], dtype=int)
 
     return X_train_std[:, support], X_test_std[:, support], support
 
@@ -191,6 +203,10 @@ def mutual_info(data, n_neighbors=3, thresh=0.05):
     )
     # NOTE: Retain features contributing above threshold to model performance.
     support = np.squeeze(np.argwhere(mut_info > thresh))
+
+    # NB: Default mechanism is to include all features is none were selected.
+    if np.size(support) < 1:
+        support = np.arange(X_train.shape[1], dtype=int)
 
     return X_train_std[:, support], X_test_std[:, support], support
 
@@ -212,6 +228,10 @@ def relieff(data, n_neighbors=20, k=10):
     selector.fit(X_train_std, y_train)
 
     support = selector.top_features[:k]
+
+    # NB: Default mechanism is to include all features is none were selected.
+    if np.size(support) < 1:
+        support = np.arange(X_train.shape[1], dtype=int)
 
     return X_train_std[:, support], X_test_std[:, support], support
 
@@ -238,12 +258,14 @@ def forward_floating(data, scoring=None, model=None, k=3, cv=10):
 
     support = selector.k_feature_idx_
 
+    # NB: Default mechanism is to include all features is none were selected.
+    if np.size(support) < 1:
+        support = np.arange(X_train.shape[1], dtype=int)
+
     return X_train_std[:, support], X_test_std[:, support], support
 
 
-# ERROR: May be tath support is 2D resulting in X data being a vector, and
-# not an array.
-def permutation_importance(data, model=None, thresh=0, nreps=100):
+def permutation_importance(data, model=None, thresh=0, nreps=5):
     """A wrapper of mlxtend feature importance permutation algorithm.
 
     """
@@ -261,16 +283,7 @@ def permutation_importance(data, model=None, thresh=0, nreps=100):
         metric=_metric,
         num_rounds=nreps, seed=0
     )
-    # NOTE: Retain features contributing above threshold to model performance.
-
-    support = np.squeeze(np.argwhere(imp > thresh))
-
-    if np.ndim(support) < 1:
-        support = np.array([support], dtype=int)
-
-    print('support')
-    print(support)
-    print()
+    support = np.squeeze(np.where(imp > thresh))
 
     return X_train_std[:, support], X_test_std[:, support], support
 
@@ -290,14 +303,27 @@ if __name__ == '__main__':
     #y = cancer.target
     #X = cancer.data
 
-    X = pd.read_csv(
-        './../../data/prepped/discr_combo/log-sigma-5/ct0_pet0_clinical.csv', index_col=0
-    ).values
-    y = pd.read_csv('./../../data/target/target.csv', index_col=0).values
+    threshold = 0.95
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42
+    df_X = pd.read_csv(
+        './../../data/to_analysis/squareroot_/ct3_pet0_clinical.csv',
+        index_col=0
     )
+    # Create correlation matrix.
+    corr_mat = df_X.corr().abs()
+
+    # Select upper triangle of correlation matrix.
+    upper = corr_mat.where(
+        np.triu(np.ones(np.shape(corr_mat)), k=1).astype(np.bool)
+    )
+    # Find index of feature columns with correlation > thresh.
+    corr_cols = [
+        col for col in upper.columns if any(upper[col] > threshold)
+    ]
+    #df_X.drop(df_X.columns[corr_cols], axis=1, inplace=True)
+    print(corr_cols)
+
+
     #rf_clf = RandomForestClassifier(random_state=0)
     #X_train_sub, X_test_sub, support = mutual_info(
     #    (X_train, X_test, y_train, y_test)
