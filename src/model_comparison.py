@@ -77,7 +77,7 @@ def model_comparison(*args, verbose=1, score_func=None, n_jobs=None, **kwargs):
                 )
             )
     # Remove temporary directory if process completed succesfully.
-    #ioutil.teardown_tempdir(TMP_RESULTS_DIR)
+    ioutil.teardown_tempdir(TMP_RESULTS_DIR)
 
     return results
 
@@ -86,65 +86,82 @@ if __name__ == '__main__':
     import numpy as np
     import pandas as pd
 
-    from sklearn.svm import SVC, LinearSVC
+
+
     from sklearn.metrics import roc_auc_score
+    from sklearn.metrics import matthews_corrcoef
+
+    from sklearn.svm import SVC, LinearSVC
     from sklearn.naive_bayes import GaussianNB
+    from sklearn.ensemble import RandomForestClassifier
     from sklearn.linear_model import LogisticRegression
     from sklearn.cross_decomposition import PLSRegression
-    from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
     from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
     from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
 
 
-    df_X = pd.read_csv(
-        './../../data/to_analysis/squareroot_/ct3_pet0_clinical.csv',
-        index_col=0
-    )
-    X = df_X.values
+    # NOTE:
+    # * Experiment with catboost/adaboost/gradient boost after ID best base
+    #   estimator.
 
-    df_y_pfs = pd.read_csv(
-        './../../data/to_analysis/target_pfs.csv', index_col=0
-    )
-    y = np.squeeze(df_y_pfs.values)
-
-    # NOTE: Errors in A analysis:
-    # * Did not dummy encode clinical data.
-
-    # Number of experiments
-    random_states = np.arange(5)
-
-    estimators = {
-        # NB: May report colinear variables.
-        'lda': LinearDiscriminantAnalysis,
-        'logreg': LogisticRegression,
-        # NB: warnings.warn('Y residual constant at iteration %s' % k)
-        'pls': PLSRegression,
-        'adaboost': AdaBoostClassifier,
-        'gnb': GaussianNB,
-        'svc': SVC,
-        'lin_svc': LinearSVC,
-    }
-
-    # Hparam setup:
-    # Use same param settings across models attempting to ensure `fair` grounds
-    # for comparison.
+    # Setup:
     K, CV, SEED = 20, 4, 0
 
-    PRIORS = [0.224, 0.776]
-    N_ESTIMATORS = [5, 50, 100, 500, 1000]
-    LEARNINGR_RATE = [0.05, 0.2, 0.5, 0.7, 1]
-    TOL = [1e-7, 1e-5, 0.0001, 0.001, 0.01, 0.1]
-    C = [0.0001, 0.001, 0.005, 0.01, 0.05, 0.1, 1.0, 10.0, 100.0, 1000.0]
+    # Number of experiments.
+    n_experiments = 20
 
-    SCORE = 'roc_auc'
+    np.random.seed(SEED)
+    random_states = np.random.randint(1000, size=n_experiments)
+
+    """
+    20 CPUs:
+        * LDA
+        * LogReg
+        * SVC
+
+    8 CPUs:
+        * GNB
+        * PLS
+
+    Filter pri:
+        * Exponential
+        * See Alise...
+    """
+
+    estimators = {
+        # NB: Reports colinear variables.
+        #'lda': LinearDiscriminantAnalysis,
+        #'logreg': LogisticRegression,
+        # NB: warnings.warn('Y residual constant at iteration %s' % k)
+        #'pls': PLSRegression,
+        #'adaboost': AdaBoostClassifier,
+        #'gnb': GaussianNB,
+        'svc': SVC,
+    }
+    # Priors summing to 1.0.
+    PFS_PRIORS = [0.677, 0.323]
+    LRC_PRIORS = [0.753, 0.247]
+
+    MAX_ITER = [800]
+
+    N_ESTIMATORS = [20, 50, 100, 200, 500, 1000]
+    LEARNINGR_RATE = [0.001, 0.05, 0.2, 0.6, 1, 3]
+
+    TOL = [0.0001, 0.001, 0.01, 0.1, 0.3, 0.7, 1]
+    C = [0.001, 0.01, 0.1, 1, 10, 100, 1000]
+
+    SCORE = roc_auc_score
+
     PENALTY = ['l1', 'l2']
     CLASS_WEIGHT = ['balanced']
 
     logreg_l1 = LogisticRegression(
-        penalty='l1', class_weight='balanced', random_state=SEED
+        penalty='l1', class_weight='balanced', random_state=SEED,
+        solver='liblinear'
     )
     logreg_l2 = LogisticRegression(
-        penalty='l2', class_weight='balanced', random_state=SEED
+        penalty='l2', class_weight='balanced', random_state=SEED,
+        solver='liblinear'
     )
     rf_model = RandomForestClassifier(
         n_estimators=50, class_weight='balanced', random_state=SEED
@@ -152,49 +169,50 @@ if __name__ == '__main__':
 
     hparams = {
         'lda': {
-            'n_components': N_ESTIMATORS,
-            'tol': TOL, 'priors': [PRIORS],
+            # NOTE: n_components determined in model selection
+            "n_components": [None], 'tol': TOL, 'priors': [PFS_PRIORS],
         },
         'logreg': {
             'C': C, 'solver': ['liblinear'], 'penalty': PENALTY,
-            'class_weight': CLASS_WEIGHT,
+            'class_weight': CLASS_WEIGHT, 'max_iter': MAX_ITER
         },
         'pls': {
-            'n_components': [5, 30, 70, 100, 150], 'tol': TOL, 'max_iter': [500]
+            # NOTE: n_components determined in model selection
+            "n_components": [None], 'tol': TOL,
         },
         'adaboost': {
             'base_estimator': [logreg_l2],
             'learning_rate': LEARNINGR_RATE, 'n_estimators': N_ESTIMATORS,
         },
         'svc': {
-            'kernel': ['rbf'], 'C': C, 'gamma': [0.001, 0.01, 0.05, 0.1, 0.2],
-            'cache_size': [30, 50, 70, 200, 300], 'degree': [2, 3],
+            'kernel': ['rbf'], 'C': C,
+            'gamma': [0.0001, 0.001, 0.01, 0.1, 0.3, 0.7, 1],
+            'cache_size': [20, 100, 300, 500], 'degree': [2, 3],
             'class_weight': CLASS_WEIGHT
         },
         'lin_svc': {
             'C': C, 'class_weight': CLASS_WEIGHT, 'penalty': PENALTY,
             'dual': [False], 'tol': TOL,
         },
-        'gnb': {'priors': [PRIORS]},
+        'gnb': {'priors': [PFS_PRIORS]},
     }
 
     selectors = {
-        'rf_permut_imp': feature_selection.permutation_importance,
         'ff_logregl1': feature_selection.forward_floating,
-        'ff_logregl2': feature_selection.forward_floating,
-        'ff_rf': feature_selection.forward_floating,
-        'var_thresh': feature_selection.variance_threshold,
-        'relieff': feature_selection.relieff,
-        'mutual_info': feature_selection.mutual_info,
+        #'ff_logregl2': feature_selection.forward_floating,
+        #'rf_permut_imp': feature_selection.permutation_importance,
+
+        #'var_thresh': feature_selection.variance_threshold,
+        #'relieff': feature_selection.relieff,
+        #'mutual_info': feature_selection.mutual_info,
     }
 
     selector_params = {
         # Wrapper methods:
+        'ff_logregl1': {'model': logreg_l1, 'k': K, 'cv': 2, 'scoring': SCORE},
+        'ff_logregl2': {'model': logreg_l2, 'k': K, 'cv': 2, 'scoring': SCORE},
         'rf_permut_imp': {'model': rf_model, 'thresh': 0.0, 'nreps': 1},
-        'ff_rf': {'model': rf_model, 'k': K, 'cv': CV, 'scoring': SCORE},
-        'ff_logregl1': {'model': logreg_l1, 'k': K, 'cv': CV, 'scoring': SCORE},
-        'ff_logregl2': {'model': logreg_l2, 'k': K, 'cv': CV, 'scoring': SCORE
-        },
+
         # Filter methods:
         'var_thresh': {'alpha': 0.05},
         'relieff': {'k': K, 'n_neighbors': 20},
@@ -203,57 +221,56 @@ if __name__ == '__main__':
 
     selection_scheme = model_selection.nested_cross_val
 
-    """
-
-    # TODO:
-    start_time = datetime.now()
-    results = model_comparison(
-        selection_scheme, X, y, estimators, hparams, selectors,
-        selector_params, random_states, CV, score_func=roc_auc_score
-    )
-    print('Execution time: {}'.format(datetime.now() - start_time))
-
-    print(results)
-    #ioutil.write_final_results(
-    #    './../../data/outputs/model_comparison/lbp/ct0_pet0_clinical.csv',
-    #    results
-    #)
-    """
-    #"""
-
     ref_feature_dir = './../../data/to_analysis'
-    ref_results_dir = './../../data/outputs/model_comparison'
+    ref_results_pfs_dir = './../../data/outputs/model_comparison_pfs'
+    ref_results_lrc_dir = './../../data/outputs/model_comparison_lrc'
 
-    filter_cats = [
-        label for label in os.listdir(ref_feature_dir)
-        if not label.endswith('.csv') and not label.startswith('.')
-    ]
-    df_y = np.squeeze(
-        pd.read_csv('./../../data/to_analysis/target.csv', index_col=0).values
+    df_y_pfs = pd.read_csv(
+        './../../data/to_analysis/target_pfs.csv', index_col=0
     )
+    df_y_lrc = pd.read_csv(
+        './../../data/to_analysis/target_lrc.csv', index_col=0
+    )
+    y_pfs, y_lrc = np.squeeze(df_y_pfs.values), np.squeeze(df_y_lrc.values)
 
-    for filter_cat in filter_cats:
 
-        path_filter_cat_feature_sets = ioutil.relative_paths(
-            os.path.join(ref_feature_dir, filter_cat), target_format='.csv'
+    dirnames = utils.listdir(ref_feature_dir)
+
+    # TODO: Benchmark big O for time budget estimation.
+    # * SVC classifier with L1 logreg
+    for dirname in dirnames[:1]:
+
+        file_paths = ioutil.relative_paths(
+            os.path.join(ref_feature_dir, dirname), target_format='.csv'
         )
-        for num, path_feature_set in enumerate(path_filter_cat_feature_sets):
+        for path_to_file in file_paths[:1]:
 
-            X = pd.read_csv(path_feature_set, index_col=0).values
 
-            start_time = datetime.now()
+            X = pd.read_csv(path_to_file, index_col=0).values
 
-            # TODO: Plot a progress bar.
-            # print('Collecting results:')
-            results = model_comparison(
-                selection_scheme, X, y, estimators, hparams, selectors,
-                selector_params, random_states, n_splits,
-                score_func=roc_auc_score
+            # path_pfs_results = TODO: where to save results
+
+            # NOTE: PFS
+            pfs_results = model_comparison(
+                selection_scheme, X, y_pfs, estimators, hparams, selectors,
+                selector_params, random_states, CV, score_func=SCORE
             )
-            # TODO: Print collection time.
-            path_results = os.path.join(
-                ref_results_dir, filter_cat, os.path.basename(path_feature_set)
+            # Write results for each analyzed data set of current filter and
+            # discr combo.
+            ioutil.write_final_results(path_pfs_results, pfs_results)
+
+
+            # path_lrc_results = TODO: where to save results
+
+            """
+            NB: Use different priors ([]).
+
+            # NOTE: LRC
+            lrc_results = model_comparison(
+                selection_scheme, X, y_lrc, estimators, hparams, selectors,
+                selector_params, random_states, CV, score_func=SCORE_FUNC
             )
-            ioutil.write_final_results(path_results, results)
-            print('Saving results to: {}'.format(path_results))
-    #"""
+            # Write results for each analyzed data set of current filter and
+            # discr combo.
+            ioutil.write_final_results(path_lrc_results, lrc_results)
+            """

@@ -25,6 +25,26 @@ from sklearn.externals import joblib
 from sklearn.model_selection import StratifiedKFold
 
 
+THRESH = 1
+
+
+def _check_estimator(nfeatures, hparams, estimator, random_state):
+
+    # Using all available features after feature selection.
+    if 'n_components' in hparams:
+        if nfeatures - 1 < 1:
+            hparams['n_components'] = 1
+        else:
+            hparams['n_components'] = nfeatures - 1
+    # Discriminating stochastic algorithms.
+    try:
+        model = estimator(**hparams, random_state=random_state)
+    except:
+        model = estimator(**hparams)
+
+    return model
+
+
 def _update_prelim_results(results, path_tempdir, random_state, *args):
     # Update results <dict> container and write preliminary results to disk.
     (
@@ -72,10 +92,38 @@ def nested_cross_val(*args, verbose=1, n_jobs=None, score_func=None, **kwargs):
     ) = args
 
     # Setup:
-    results = {'experiment_id': random_state}
-    feature_votes = feature_selection.FeatureVotings(
-        nfeatures=X.shape[1], thresh=n_splits-1
+    path_case_file = os.path.join(
+        path_tempdir, '{}_{}_{}'.format(
+            estimator.__name__, selector['name'], random_state
+        )
     )
+    if os.path.isfile(path_case_file):
+        results = ioutil.read_prelim_result(path_case_file)
+        if verbose > 0:
+            print("Reloading previous results")
+
+    else:
+        results = _nested_cross_val(
+            *args, verbose=verbose, score_func=score_func, n_jobs=n_jobs, **kwargs
+        )
+        if verbose > 0:
+            print('Collected new results)
+
+    return results
+
+
+def _nested_cross_val(*args, verbose=1, n_jobs=None, score_func=None, **kwargs):
+    (
+        X, y, estimator, hparam_grid, selector, n_splits, random_state,
+        path_tempdir
+    ) = args
+
+    global THRESH
+
+    # Setup:
+    results = {'experiment_id': random_state}
+    features = np.zeros(X.shape[1], dtype=int)
+
     # Outer cross-validation loop.
     kfolds = StratifiedKFold(
         n_splits=n_splits, random_state=random_state, shuffle=True
@@ -95,8 +143,9 @@ def nested_cross_val(*args, verbose=1, n_jobs=None, score_func=None, **kwargs):
             best_model, X_train[:, best_support], X_test[:, best_support],
             y_train, y_test, score_func=score_func
         )
-        # Bookkeeping of best feature subset in each fold.
-        feature_votes.update_votes(best_support)
+        # Bookeeping of best feature subset in each fold.
+        #feature_votes.update_votes(best_support)
+        features[best_support] += 1
         opt_hparams.append(best_model.get_params())
         train_scores.append(train_score), test_scores.append(test_score)
 
@@ -106,7 +155,8 @@ def nested_cross_val(*args, verbose=1, n_jobs=None, score_func=None, **kwargs):
 
     end_results = _update_prelim_results(
         results, path_tempdir, random_state, estimator, selector, mode_hparams,
-        np.mean(test_scores), np.mean(train_scores), feature_votes.major_votes
+        np.mean(test_scores), np.mean(train_scores),
+        np.squeeze(np.where(features >= THRESH))
     )
     return end_results
 
@@ -118,18 +168,13 @@ def grid_search_cv(*args, score_func=None, n_jobs=None, verbose=0, **kwargs):
     """
     estimator, hparam_grid, selector, X, y, n_splits, random_state = args
 
+    global THRESH
+
     best_test_score, best_model, best_support = 0, [], []
     for combo_num, hparams in enumerate(hparam_grid):
 
         # Setup:
-        try:
-            model = estimator(**hparams, random_state=random_state)
-        except:
-            model = estimator(**hparams)
-
-        feature_votes = feature_selection.FeatureVotings(
-            nfeatures=X.shape[1], thresh=n_splits-1
-        )
+        features = np.zeros(X.shape[1], dtype=int)
         # Inner cross-validation loop: Determine average model performance for
         # each hparam combo.
         kfolds = StratifiedKFold(
@@ -140,29 +185,28 @@ def grid_search_cv(*args, score_func=None, n_jobs=None, verbose=0, **kwargs):
 
             X_train, X_test = X[train_idx], X[test_idx]
             y_train, y_test = y[train_idx], y[test_idx]
-
             # NOTE: Standardizing in feature sel function.
             X_train_sub, X_test_sub, support = selector['func'](
                 (X_train, X_test, y_train, y_test), **selector['params']
+            )
+            model = _check_estimator(
+                np.size(support), hparams, estimator, random_state=random_state
             )
             train_score, test_score = utils.scale_fit_predict(
                 model, X_train_sub, X_test_sub, y_train, y_test,
                 score_func=score_func
             )
             # Bookkeeping of features selected in each fold.
-            feature_votes.update_votes(support)
+            features[support] += 1
             train_scores.append(train_score), test_scores.append(test_score)
 
         if np.mean(test_scores) > best_test_score:
             best_test_score = np.mean(test_scores)
-            best_support = feature_votes.major_votes #consensus_votes
-            try:
-                best_model = estimator(**hparams, random_state=random_state)
-            except:
-                best_model = estimator(**hparams)
-
+            best_support = np.squeeze(np.where(features >= THRESH))
+            best_model = _check_estimator(
+                np.size(support), hparams, estimator, random_state=random_state
+            )
     return best_model, best_support
-
 
 
 def bootstrap_point632plus(*args, verbose=1, score_func=None, **kwargs):

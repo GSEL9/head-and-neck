@@ -1,3 +1,5 @@
+import utils
+
 import pandas as pd
 import numpy as np
 from sklearn.linear_model import LogisticRegression
@@ -12,6 +14,21 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
 from sklearn.neural_network import MLPClassifier
 from skrebate import ReliefF
+
+
+K, CV, SEED = 20, 4, 0
+
+MAX_ITER = [1000]
+PRIORS = [0.224, 0.776]
+N_ESTIMATORS = [20, 50, 100, 500, 1000]
+LEARNINGR_RATE = [0.05, 0.2, 0.5, 0.7, 1]
+TOL = [1e-5, 0.0001, 0.001, 0.01, 0.1]
+C = [0.0001, 0.001, 0.005, 0.01, 0.05, 0.1, 1.0, 10.0, 100.0, 1000.0]
+
+SCORE = 'roc_auc'
+PENALTY = ['l1', 'l2']
+CLASS_WEIGHT = ['balanced']
+
 
 
 estimators = {

@@ -21,6 +21,16 @@ from numba import jit
 from sklearn.preprocessing import StandardScaler
 
 
+def listdir(path_to_dir, skip_tail=('.csv'), skip_head=('.')):
+
+    labels = []
+    for label in os.listdir(path_to_dir):
+        if not label.endswith(skip_tail) and not label.startswith(skip_head):
+            labels.append(str(label))
+
+    return labels
+
+
 def setup_logger(fname='extraction_log.txt'):
     """Setup logger with info filter.
 
