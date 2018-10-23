@@ -86,8 +86,6 @@ if __name__ == '__main__':
     import numpy as np
     import pandas as pd
 
-
-
     from sklearn.metrics import roc_auc_score
     from sklearn.metrics import matthews_corrcoef
 
@@ -112,21 +110,6 @@ if __name__ == '__main__':
 
     np.random.seed(SEED)
     random_states = np.random.randint(1000, size=n_experiments)
-
-    """
-    20 CPUs:
-        * LDA
-        * LogReg
-        * SVC
-
-    8 CPUs:
-        * GNB
-        * PLS
-
-    Filter pri:
-        * Exponential
-        * See Alise...
-    """
 
     estimators = {
         # NB: Reports colinear variables.
@@ -199,12 +182,12 @@ if __name__ == '__main__':
 
     selectors = {
         'ff_logregl1': feature_selection.forward_floating,
-        #'ff_logregl2': feature_selection.forward_floating,
-        #'rf_permut_imp': feature_selection.permutation_importance,
+        'ff_logregl2': feature_selection.forward_floating,
+        'rf_permut_imp': feature_selection.permutation_importance,
 
-        #'var_thresh': feature_selection.variance_threshold,
-        #'relieff': feature_selection.relieff,
-        #'mutual_info': feature_selection.mutual_info,
+        'var_thresh': feature_selection.variance_threshold,
+        'relieff': feature_selection.relieff,
+        'mutual_info': feature_selection.mutual_info,
     }
 
     selector_params = {
@@ -236,6 +219,14 @@ if __name__ == '__main__':
 
     dirnames = utils.listdir(ref_feature_dir)
 
+    runs = [
+        'exponential', 'squareroot_', 'original', 'lbp',
+        'log-sigma-1', 'log-sigma-3', 'log-sigma-5',
+        'wavelet-LLL', 'wavelet-LLH', 'wavelet-LHL', 'wavelet-LHH',
+        'wavelet-HLL', 'wavelet-HLH', 'wavelet-HHL', 'wavelet-HHH'
+    ]
+
+
     # TODO: Benchmark big O for time budget estimation.
     # * SVC classifier with L1 logreg
     for dirname in dirnames[:1]:
@@ -263,7 +254,7 @@ if __name__ == '__main__':
             # path_lrc_results = TODO: where to save results
 
             """
-            NB: Use different priors ([]).
+            NB: Uses different priors.
 
             # NOTE: LRC
             lrc_results = model_comparison(

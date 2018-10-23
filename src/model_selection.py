@@ -20,6 +20,7 @@ import feature_selection
 import numpy as np
 import pandas as pd
 
+from datetime import datetime
 from collections import OrderedDict
 from sklearn.externals import joblib
 from sklearn.model_selection import StratifiedKFold
@@ -100,14 +101,17 @@ def nested_cross_val(*args, verbose=1, n_jobs=None, score_func=None, **kwargs):
     if os.path.isfile(path_case_file):
         results = ioutil.read_prelim_result(path_case_file)
         if verbose > 0:
-            print("Reloading previous results")
+            print('Reloading previous results')
 
     else:
+        if verbose > 0:
+            start_time = datetime.now()
         results = _nested_cross_val(
             *args, verbose=verbose, score_func=score_func, n_jobs=n_jobs, **kwargs
         )
         if verbose > 0:
-            print('Collected new results)
+            delta_time = datetime.now() - start_time
+            print('Collected results in: {}'.format(delta_time))
 
     return results
 
