@@ -213,6 +213,86 @@ def grid_search_cv(*args, score_func=None, n_jobs=None, verbose=0, **kwargs):
     return best_model, best_support
 
 
+def nested_bootstrap(*args, verbose=1, n_jobs=None, score_func=None, **kwargs):
+    """
+
+    """
+    (
+        X, y, estimator, hparam_grid, selector, n_splits, random_state,
+        path_tempdir
+    ) = args
+
+    # Setup:
+    path_case_file = os.path.join(
+        path_tempdir, '{}_{}_{}'.format(
+            estimator.__name__, selector['name'], random_state
+        )
+    )
+    if os.path.isfile(path_case_file):
+        results = ioutil.read_prelim_result(path_case_file)
+        if verbose > 0:
+            print('Reloading previous results')
+    else:
+        if verbose > 0:
+            start_time = datetime.now()
+        results = _nested_bootstrap(
+            *args, verbose=verbose, score_func=score_func, n_jobs=n_jobs,
+            **kwargs
+        )
+        if verbose > 0:
+            delta_time = datetime.now() - start_time
+            print('Collected results in: {}'.format(delta_time))
+
+    return results
+
+
+def _nested_bootstrap(*args, verbose=1, n_jobs=None, score_func=None, **kwargs):
+    (
+        X, y, estimator, hparam_grid, selector, n_splits, random_state,
+        path_tempdir
+    ) = args
+
+    global THRESH
+
+    # Setup:
+    results = {'experiment_id': random_state}
+    features = np.zeros(X.shape[1], dtype=int)
+
+    # Outer OOB loop.
+    train_errors, test_errors = [], []
+    for split_num, (train_idx, test_idx) in enumerate(boot.split(X, y)):
+
+        X_train, X_test = X[train_idx], X[test_idx]
+        y_train, y_test = y[train_idx], y[test_idx]
+
+        # Determine best model and feature subset.
+        best_model, best_support = bootstrap_point632plus(
+            estimator, hparam_grid, selector, X_train, y_train, n_splits,
+            random_state, verbose=verbose, score_func=score_func, n_jobs=n_jobs
+        )
+        train_score, test_score = utils.scale_fit_predict(
+            best_model, X_train[:, best_support], X_test[:, best_support],
+            y_train, y_test, score_func=score_func
+        )
+        # Bookeeping of best feature subset in each fold.
+        #feature_votes.update_votes(best_support)
+        features[best_support] += 1
+        opt_hparams.append(best_model.get_params())
+        train_scores.append(train_score), test_scores.append(test_score)
+
+    # NOTE: Obtaining a different set of hparams for each fold. Selecting mode
+    # of hparams as opt hparam settings.
+    mode_hparams = max(opt_hparams, key=opt_hparams.count)
+
+    end_results = _update_prelim_results(
+        results, path_tempdir, random_state, estimator, selector, mode_hparams,
+        np.mean(test_scores), np.mean(train_scores),
+        np.squeeze(np.where(features >= THRESH))
+    )
+    return end_results
+
+
+# OOB Grid search
 def bootstrap_point632plus(*args, verbose=1, score_func=None, **kwargs):
     """A out-of-bag bootstrap scheme to select optimal classifier based on
     .632+ estimator.
@@ -258,6 +338,7 @@ def _boot_validation(*args, score_func=None, n_jobs=1, verbose=0, **kwargs):
     model = estimator(**hparams, random_state=random_state)
     feature_votes = feature_selection.FeatureVotings(nfeatures=X.shape[1])
 
+    # Inner OOB loop.
     train_errors, test_errors = [], []
     for split_num, (train_idx, test_idx) in enumerate(boot.split(X, y)):
 
