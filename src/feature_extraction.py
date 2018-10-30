@@ -159,12 +159,14 @@ if __name__ == '__main__':
         'ct_extract_set_discr2.yaml',
         'ct_extract_set_discr3.yaml',
         'ct_extract_set_discr4.yaml',
+        'ct_extract_set_discr5.yaml'
     ]
     pet_fnames = [
         'pet_extract_set_discr1.yaml',
         'pet_extract_set_discr2.yaml',
         'pet_extract_set_discr3.yaml',
         'pet_extract_set_discr4.yaml',
+        'pet_extract_set_discr5.yaml'
     ]
     ct_param_files = [
         os.path.join(base_path, ct_fname) for ct_fname in ct_fnames
@@ -177,12 +179,14 @@ if __name__ == '__main__':
         './../../data/outputs/ct_features/raw_ct_features2.csv',
         './../../data/outputs/ct_features/raw_ct_features3.csv',
         './../../data/outputs/ct_features/raw_ct_features4.csv',
+        './../../data/outputs/ct_features/raw_ct_features5.csv',
     ]
     path_raw_pet_features = [
         './../../data/outputs/pet_features/raw_pet_features1.csv',
         './../../data/outputs/pet_features/raw_pet_features2.csv',
         './../../data/outputs/pet_features/raw_pet_features3.csv',
         './../../data/outputs/pet_features/raw_pet_features4.csv',
+        './../../data/outputs/pet_features/raw_pet_features5.csv',
     ]
 
     sitk.ProcessObject_SetGlobalDefaultNumberOfThreads(1)
@@ -195,7 +199,7 @@ if __name__ == '__main__':
     )
 
     utils.setup_logger()
-    """
+
     for num, pet_param_file in enumerate(pet_param_files):
 
         #utils.setup_logger(unique_fname)
@@ -207,7 +211,6 @@ if __name__ == '__main__':
         print('Features extracted in: {}'.format(datetime.now() - start_time))
 
         ioutil.write_final_results(path_raw_pet_features[num], raw_pet_outputs)
-    """
 
     for num, ct_param_file in enumerate(ct_param_files):
 

@@ -43,6 +43,11 @@ def _check_estimator(nfeatures, hparams, estimator, random_state):
     except:
         model = estimator(**hparams)
 
+    try:
+        model.n_jobs = -1
+    except:
+        pass
+
     return model
 
 
@@ -107,7 +112,8 @@ def nested_cross_val(*args, verbose=1, n_jobs=None, score_func=None, **kwargs):
         if verbose > 0:
             start_time = datetime.now()
         results = _nested_cross_val(
-            *args, verbose=verbose, score_func=score_func, n_jobs=n_jobs, **kwargs
+            *args, verbose=verbose, score_func=score_func, n_jobs=n_jobs,
+            **kwargs
         )
         if verbose > 0:
             delta_time = datetime.now() - start_time
@@ -134,6 +140,9 @@ def _nested_cross_val(*args, verbose=1, n_jobs=None, score_func=None, **kwargs):
     )
     train_scores, test_scores, opt_hparams = [], [], []
     for fold_num, (train_idx, test_idx) in enumerate(kfolds.split(X, y)):
+
+        if verbose > 0:
+            print('Outer loop fold {}'.format(fold_num))
 
         X_train, X_test = X[train_idx], X[test_idx]
         y_train, y_test = y[train_idx], y[test_idx]
@@ -165,7 +174,7 @@ def _nested_cross_val(*args, verbose=1, n_jobs=None, score_func=None, **kwargs):
     return end_results
 
 
-def grid_search_cv(*args, score_func=None, n_jobs=None, verbose=0, **kwargs):
+def grid_search_cv(*args, score_func=None, n_jobs=None, verbose=2, **kwargs):
     """Exhaustive search in estimator hyperparameter space to derive optimal
     combination with respect to scoring function.
 
@@ -174,13 +183,19 @@ def grid_search_cv(*args, score_func=None, n_jobs=None, verbose=0, **kwargs):
 
     global THRESH
 
+    if verbose > 0:
+        start_time = datetime.now()
+        print('Entering grid search')
+
     best_test_score, best_model, best_support = 0, [], []
     for combo_num, hparams in enumerate(hparam_grid):
 
+        if verbose > 1:
+            print('Hyperparameter combo {}'.format(combo_num))
+
         # Setup:
         features = np.zeros(X.shape[1], dtype=int)
-        # Inner cross-validation loop: Determine average model performance for
-        # each hparam combo.
+
         kfolds = StratifiedKFold(
             n_splits=n_splits, random_state=random_state, shuffle=True
         )
@@ -189,6 +204,7 @@ def grid_search_cv(*args, score_func=None, n_jobs=None, verbose=0, **kwargs):
 
             X_train, X_test = X[train_idx], X[test_idx]
             y_train, y_test = y[train_idx], y[test_idx]
+
             # NOTE: Standardizing in feature sel function.
             X_train_sub, X_test_sub, support = selector['func'](
                 (X_train, X_test, y_train, y_test), **selector['params']
@@ -210,10 +226,13 @@ def grid_search_cv(*args, score_func=None, n_jobs=None, verbose=0, **kwargs):
             best_model = _check_estimator(
                 np.size(support), hparams, estimator, random_state=random_state
             )
+    if verbose > 0:
+        print('Exiting grid search at {}'.format(datetime.now() - start_time))
+
     return best_model, best_support
 
 
-def nested_bootstrap(*args, verbose=1, n_jobs=None, score_func=None, **kwargs):
+def bootstrap_point632plus(*args, verbose=1, n_jobs=1, score_func=None):
     """
 
     """
@@ -232,12 +251,12 @@ def nested_bootstrap(*args, verbose=1, n_jobs=None, score_func=None, **kwargs):
         results = ioutil.read_prelim_result(path_case_file)
         if verbose > 0:
             print('Reloading previous results')
+
     else:
         if verbose > 0:
             start_time = datetime.now()
-        results = _nested_bootstrap(
-            *args, verbose=verbose, score_func=score_func, n_jobs=n_jobs,
-            **kwargs
+        results = _bootstrap_point632plus(
+            *args, verbose=verbose, score_func=score_func, n_jobs=n_jobs
         )
         if verbose > 0:
             delta_time = datetime.now() - start_time
@@ -246,54 +265,7 @@ def nested_bootstrap(*args, verbose=1, n_jobs=None, score_func=None, **kwargs):
     return results
 
 
-def _nested_bootstrap(*args, verbose=1, n_jobs=None, score_func=None, **kwargs):
-    (
-        X, y, estimator, hparam_grid, selector, n_splits, random_state,
-        path_tempdir
-    ) = args
-
-    global THRESH
-
-    # Setup:
-    results = {'experiment_id': random_state}
-    features = np.zeros(X.shape[1], dtype=int)
-
-    # Outer OOB loop.
-    train_errors, test_errors = [], []
-    for split_num, (train_idx, test_idx) in enumerate(boot.split(X, y)):
-
-        X_train, X_test = X[train_idx], X[test_idx]
-        y_train, y_test = y[train_idx], y[test_idx]
-
-        # Determine best model and feature subset.
-        best_model, best_support = bootstrap_point632plus(
-            estimator, hparam_grid, selector, X_train, y_train, n_splits,
-            random_state, verbose=verbose, score_func=score_func, n_jobs=n_jobs
-        )
-        train_score, test_score = utils.scale_fit_predict(
-            best_model, X_train[:, best_support], X_test[:, best_support],
-            y_train, y_test, score_func=score_func
-        )
-        # Bookeeping of best feature subset in each fold.
-        #feature_votes.update_votes(best_support)
-        features[best_support] += 1
-        opt_hparams.append(best_model.get_params())
-        train_scores.append(train_score), test_scores.append(test_score)
-
-    # NOTE: Obtaining a different set of hparams for each fold. Selecting mode
-    # of hparams as opt hparam settings.
-    mode_hparams = max(opt_hparams, key=opt_hparams.count)
-
-    end_results = _update_prelim_results(
-        results, path_tempdir, random_state, estimator, selector, mode_hparams,
-        np.mean(test_scores), np.mean(train_scores),
-        np.squeeze(np.where(features >= THRESH))
-    )
-    return end_results
-
-
-# OOB Grid search
-def bootstrap_point632plus(*args, verbose=1, score_func=None, **kwargs):
+def _bootstrap_point632plus(*args, verbose=1, score_func=None, n_jobs=1):
     """A out-of-bag bootstrap scheme to select optimal classifier based on
     .632+ estimator.
 
@@ -305,42 +277,44 @@ def bootstrap_point632plus(*args, verbose=1, score_func=None, **kwargs):
 
     # Setup:
     results = {'experiment_id': random_state}
-
-    boot = utils.BootstrapOutOfBag(
+    # N splits produces N bootstrap samples
+    oob_sampler = utils.BootstrapOutOfBag(
         n_splits=n_splits, random_state=random_state
     )
-    avg_test_error, avg_train_error, best_model, best_support = 1, 1, [], []
+    min_test_error, min_train_error = 1, 1
+    best_model, best_support = [], []
     for combo_num, hparams in enumerate(hparam_grid):
 
-        test_errors, train_errors, support = _boot_validation(
-            estimator, hparams, selector, boot, X, y, random_state,
-            score_func=score_func, n_jobs=1, verbose=0, **kwargs
+        test_errors, train_errors, support = _oob_performance(
+            estimator, hparams, selector, oob_sampler, X, y, random_state,
+            score_func=score_func, n_jobs=n_jobs, verbose=verbose,
         )
         # Determine the optimal hparam combo.
-        if np.mean(test_errors) < avg_test_error:
-            avg_test_error = np.mean(test_errors)
-            avg_train_error = np.mean(train_errors)
-            best_model = estimator(**hparams, random_state=random_state)
-            best_support = support
+        if np.mean(test_errors) < min_test_error:
+            min_test_error = np.mean(test_errors)
+            min_train_error = np.mean(train_errors)
+            best_hparams, best_support = hparams, support
 
     end_results = _update_prelim_results(
         results, path_tempdir, random_state, estimator, selector,
-        best_model.get_params(), avg_test_error, avg_train_error, best_support
+        best_hparams, min_test_error, min_train_error, best_support
     )
     return end_results
 
 
-def _boot_validation(*args, score_func=None, n_jobs=1, verbose=0, **kwargs):
+def _oob_performance(*args, score_func=None, n_jobs=1, verbose=0):
+    # Computes the .632+ score for N splits.
+    (
+        estimator, hparams, selector, oob_sampler, X, y, random_state
+    ) = args
 
-    estimator, hparams, selector, boot, X, y, random_state = args
+    global THRESH
 
     # Setup:
-    model = estimator(**hparams, random_state=random_state)
-    feature_votes = feature_selection.FeatureVotings(nfeatures=X.shape[1])
+    features = np.zeros(X.shape[1], dtype=int)
 
-    # Inner OOB loop.
     train_errors, test_errors = [], []
-    for split_num, (train_idx, test_idx) in enumerate(boot.split(X, y)):
+    for split_num, (train_idx, test_idx) in enumerate(oob_sampler.split(X, y)):
 
         X_train, X_test = X[train_idx], X[test_idx]
         y_train, y_test = y[train_idx], y[test_idx]
@@ -348,6 +322,9 @@ def _boot_validation(*args, score_func=None, n_jobs=1, verbose=0, **kwargs):
         # NOTE: Standardizing in feature sel function.
         X_train_sub, X_test_sub, support = selector['func'](
             (X_train, X_test, y_train, y_test), **selector['params']
+        )
+        model = _check_estimator(
+            np.size(support), hparams, estimator, random_state=random_state
         )
         model.fit(X_train_sub, y_train)
         # Aggregate model predictions.
@@ -368,6 +345,6 @@ def _boot_validation(*args, score_func=None, n_jobs=1, verbose=0, **kwargs):
             )
         )
         # Bookkeeping of features selected in each fold.
-        feature_votes.update_votes(support)
+        features[support] += 1
 
-    return train_errors, test_errors, feature_votes.consensus_votes
+    return train_errors, test_errors, np.squeeze(np.where(features >= THRESH))
