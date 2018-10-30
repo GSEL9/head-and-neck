@@ -114,8 +114,8 @@ if __name__ == '__main__':
     from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
 
     # Setup:
-    K, CV, SEED = 15, 4, 0
-    N_REPS = 10
+    K, SEED = 15, 0
+    N_REPS = 100
 
     # Priors summing to 1.0.
     PFS_PRIORS = [0.677, 0.323]
