@@ -135,7 +135,7 @@ def scale_fit_predict(*args, score_func=None, **kwargs):
         X_test (array-like): Test set.
         y_train (array-like): Target training set.
         y_test (array-like): Target test set.
- m
+
     Returns:
         (tuple): Traning and test scores.
 

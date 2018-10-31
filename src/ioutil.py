@@ -214,8 +214,12 @@ if __name__ == '__main__':
         return image - 1024
 
 
-    matlab_to_nrrd(
-        './../../data/images/ct_cropped_raw/',
-        './../../data/images/ct_cropped_prep/',
-        modality='CT', transform=None
-    )
+    #matlab_to_nrrd(
+    #    './../../data/images/ct_cropped_raw/',
+    #    './../../data/images/ct_cropped_prep/',
+    #    modality='CT', transform=None
+    #)
+
+    pet_samples = relative_paths('./../../data/images/pet_cropped', target_format='nrrd')
+    ct_samples = relative_paths('./../../data/images/ct_cropped', target_format='nrrd')
+    print(len(pet_samples), len(ct_samples))

@@ -102,7 +102,7 @@ if __name__ == '__main__':
 
     from datetime import datetime
     from model_comparison import model_comparison
-    from model_selection import bootstrap_point632plus #nested_cross_val
+    from model_selection import nested_point632plus
 
     from sklearn.metrics import roc_auc_score
     from sklearn.svm import SVC, LinearSVC
@@ -114,8 +114,7 @@ if __name__ == '__main__':
     from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
 
     # Setup:
-    K, SEED = 15, 0
-    N_REPS = 100
+    K, SEED, N_REPS = 10, 0, 50
 
     # Priors summing to 1.0.
     PFS_PRIORS = [0.677, 0.323]
@@ -217,41 +216,23 @@ if __name__ == '__main__':
         },
     }
 
-    selection_scheme = bootstrap_point632plus #nested_cross_val
+    comparison_scheme = nested_point632plus
+    df_X = pd.read_csv(
+        './../../data/to_analysis/lbp/ct4_pet0_clinical.csv', index_col=0
+    )
+    #X = pd.read_csv(
+    #    './../../data/to_analysis/lbp/ct4_pet1_clinical.csv', index_col=0
+    #)
+    X = df_X.values
 
-    ref_feature_dir = './../../data/to_analysis'
-    ref_results_pfs_dir = './../../data/outputs/model_comparison_pfs'
-    ref_results_lrc_dir = './../../data/outputs/model_comparison_lrc'
+    path_to_results = './../../data/outputs/model_comparison_pfs/ct4_pet0_clinical.csv'
 
-    dirnames = utils.listdir(ref_feature_dir)
-    dirnames = dirnames[:10] # dirnames[10:]
-    base_path_pfs_outputs = './../../data/outputs/model_comparison_pfs/'
-    base_path_lrc_outputs = './../../data/outputs/model_comparison_lrc/'
-
-    for dirname in dirnames:
-        #print('Filter:', dirname)
-
-        file_paths = ioutil.relative_paths(
-            os.path.join(ref_feature_dir, dirname), target_format='.csv'
-        )
-        for path_to_file in file_paths:
-            #print('Feature set:', os.path.basename(path_to_file))
-
-            fname = os.path.basename(path_to_file)
-            path_case_file = os.path.join(ref_results_lrc_dir, dirname, fname)
-
-            if os.path.isfile(path_case_file):
-                pass
-            else:
-                path_lrc_results = os.path.join(
-                    base_path_lrc_outputs, dirname, fname
-                )
-                X = pd.read_csv(path_to_file, index_col=0).values
-
-                time = datetime.now()
-                lrc_results = model_comparison(
-                    selection_scheme, X, y_lrc, estimators, hparams, selectors,
-                    selector_params, random_states, N_REPS, path_lrc_results,
-                    score_func=SCORE
-                )
-                print('Run completed in {}'.format(datetime.now() - time))
+    start_time = datetime.now()
+    print('Started model comparison experiments')
+    results = model_comparison(
+        comparison_scheme, X, y_pfs, estimators, hparams, selectors,
+        selector_params, random_states, N_REPS, path_to_results,
+        score_func=SCORE
+    )
+    print('Ended model comparison experiments in {}'
+          ''.format(datetime.now() - start_time))

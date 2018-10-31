@@ -37,7 +37,7 @@ def _check_estimator(nfeatures, hparams, estimator, random_state):
             hparams['n_components'] = 1
         else:
             hparams['n_components'] = nfeatures - 1
-    # Discriminating stochastic algorithms.
+    # If stochastic algorithms.
     try:
         model = estimator(**hparams, random_state=random_state)
     except:
@@ -255,6 +255,7 @@ def nested_point632plus(*args, verbose=1, n_jobs=1, score_func=None):
     else:
         if verbose > 0:
             start_time = datetime.now()
+            print('Entering nested procedure with ID: {}'.format(random_state))
         results = _nested_point632plus(
             *args, verbose=verbose, score_func=score_func, n_jobs=n_jobs
         )
@@ -277,58 +278,45 @@ def _nested_point632plus(*args, n_jobs=None, score_func=None, **kwargs):
 
     # Setup:
     results = {'experiment_id': random_state}
-    # N splits produces N bootstrap samples
+    # Producing N bootstrap samples.
     outer_sampler = utils.BootstrapOutOfBag(
         n_splits=n_splits, random_state=random_state
     )
     sel_features = np.zeros(X.shape[1], dtype=int)
     # Outer loop for best models average performance.
-    train_errors, test_errors = [], []
+    train_errors, test_errors, opt_hparams = [], [], []
     for num, (train_idx, test_idx) in enumerate(outer_sampler.split(X, y)):
 
         X_train, X_test = X[train_idx], X[test_idx]
         y_train, y_test = y[train_idx], y[test_idx]
 
-        min_test_error, min_train_error = 1, 1
+        min_test_error = 1
         inner_sampler = utils.BootstrapOutOfBag(
             n_splits=n_splits, random_state=random_state
         )
         # Inner loop for model selection.
+        best_hparams, best_support = [], []
         for combo_num, hparams in enumerate(hparam_grid):
-
+            # NOTE: Standardizing in feature sel function.
             test_errors, train_errors, support = oob_resampling(
-                estimator, hparams, selector, inner_sampler, X, y,
+                estimator, hparams, selector, inner_sampler, X_train, y_train,
                 random_state, score_func=score_func, n_jobs=n_jobs,
             )
             # Determine the optimal hparam combo.
             if np.mean(test_errors) < min_test_error:
                 min_test_error = np.mean(test_errors)
-                min_train_error = np.mean(train_errors)
                 best_hparams, best_support = hparams, support
 
         # Best model.
         model = _check_estimator(
             np.size(best_support), best_hparams, estimator, random_state
         )
-        model.fit(X_train[:, best_support], y_train)
-        # Aggregate model predictions.
-        y_test_pred = model.predict(X_test[:, best_support])
-        y_train_pred = model.predict(X_train[:, best_support])
-        test_score = score_func(y_test, y_test_pred)
-        train_score = score_func(y_train, y_train_pred)
-        # Compute train and test errors.
-        train_errors.append(
-            utils.point632p_score(
-                y_train, y_train_pred, train_score, test_score
-            )
+        train_errors, test_errors = scale_fit_predict632(
+            model, X_train[:, best_support], X_test[:, best_support], y_train,
+            y_test, score_func=score_func
         )
-        test_errors.append(
-            utils.point632p_score(
-                y_test, y_test_pred, train_score, test_score
-            )
-        )
-        # Bookeeping of best feature subset in each fold.
-        #feature_votes.update_votes(best_support)
+        train_errors.append(train_errors), test_errors.append(test_errors)
+        # Bookeeping of best feature subset and hparams in each fold.
         sel_features[best_support] += 1
         opt_hparams.append(model.get_params())
 
@@ -341,7 +329,6 @@ def _nested_point632plus(*args, n_jobs=None, score_func=None, **kwargs):
         np.squeeze(np.where(sel_features >= THRESH))
     )
     return end_results
-
 
 
 def point632plus(*args, verbose=1, n_jobs=1, score_func=None):
