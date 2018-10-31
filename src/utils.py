@@ -219,3 +219,28 @@ def point632p_score(y_true, y_pred, train_score, test_score):
     score = _point632p_score(weight, train_error, test_error)
 
     return score
+
+
+def scale_fit_predict632(*args, score_func=None, **kwargs):
+
+    model, X_train, X_test, y_train, y_test = args
+
+    # Compute Z scores.
+    X_train_std, X_test_std = train_test_z_scores(X_train, X_test)
+
+    model.fit(X_train_std, y_train)
+
+    # Aggregate model predictions.
+    y_test_pred = model.predict(X_test_std)
+    y_train_pred = model.predict(X_train_std)
+    test_score = score_func(y_test, y_test_pred)
+    train_score = score_func(y_train, y_train_pred)
+
+    # Compute train and test errors.
+    train_errors = point632p_score(
+        y_train, y_train_pred, train_score, test_score
+    )
+    test_errors = point632p_score(
+        y_test, y_test_pred, train_score, test_score
+    )
+    return train_errors, test_errors

@@ -143,7 +143,7 @@ def variance_threshold(data, alpha=0.05):
     X_train_std, X_test_std = utils.train_test_z_scores(X_train, X_test)
 
     selector = feature_selection.VarianceThreshold(threshold=alpha)
-    # NOTE: Cannot filter variance from standardized data.
+    # NB: Cannot filter variance from standardized data.
     selector.fit(X_train, y_train)
     support = _check_support(selector.get_support(indices=True), X_train_std)
 
