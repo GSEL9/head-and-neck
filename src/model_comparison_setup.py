@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# model_comparison_experiments.py
+# model_comparison_experi.py
 #
 
 """
@@ -24,7 +24,7 @@ def target(path_to_target, index_col=0):
 def feature_set(path_to_data, index_col=0):
 
     data = pd.read_csv(path_to_data, index_col=index_col)
-    return data.values
+    return np.array(data.values, dtype=float)
 
 
 if __name__ == '__main__':
@@ -46,19 +46,20 @@ if __name__ == '__main__':
     from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
 
     # Setup: number of target features, random seed, number of OOB splits.
-    K, SEED, N_REPS = 10, 0, 50
+    K, SEED, N_REPS = 15, 0, 50
 
     # Shared hyperparameters:
     MAX_ITER = [800]
     PENALTY = ['l2']
     CLASS_WEIGHT = ['balanced']
-    # Priors for both target variables summing to 1.0.
-    PFS_PRIORS = [0.677, 0.323]
-    LRC_PRIORS = [0.753, 0.247]
     C = [0.001, 0.01, 0.1, 1, 10, 100]
     TOL = [0.001, 0.01, 0.1, 0.3, 0.7, 1]
     N_ESTIMATORS = [20, 50, 100, 500, 1000]
     LEARNINGR_RATE = [0.001, 0.05, 0.2, 0.6, 1]
+
+    # Priors for both target variables summing to 1.0.
+    PFS_PRIORS = [0.677, 0.323]
+    LRC_PRIORS = [0.753, 0.247]
 
     # Loss function.
     SCORE = roc_auc_score
@@ -66,9 +67,15 @@ if __name__ == '__main__':
     # Repeatability and reproducibility.
     np.random.seed(SEED)
 
-    # Number of experiments.
+    # Number of repeated experiments.
     n_experiments = 10
     random_states = np.random.randint(1000, size=n_experiments)
+
+    # Set comparison procedure.
+    comparison_scheme = nested_point632plus
+
+    # Feature data.
+    X = feature_set('./../../data/to_analysis/lbp/ct3_pet1_clinical.csv')
 
     # Wrapped algorithms in feature selection.
     logreg_l1 = LogisticRegression(
@@ -110,7 +117,14 @@ if __name__ == '__main__':
         'pls': PLSRegression,
         'qda': QuadraticDiscriminantAnalysis,
     }
-    # Hyperparameters classification algorithms.
+
+    # PFS target data.
+    y_pfs = target('./../../data/to_analysis/target_pfs.csv')
+
+    # Location to store results.
+    path_to_pfsresults = './../../data/outputs/model_comparison_lbp/pfs/ct3_pet1_clinical.csv'
+
+    # Hyperparameters classification algorithms. Note specifying PFS priors.
     hparams = {
         'lda': {
             # NOTE: n_components determined in model selection work function.
@@ -130,22 +144,39 @@ if __name__ == '__main__':
             'class_weight': CLASS_WEIGHT, 'max_iter': MAX_ITER
         },
     }
-    # Set comparison procedure.
-    comparison_scheme = nested_point632plus
+    results_pfs = model_comparison(
+        comparison_scheme, X, y_pfs, estimators, hparams, selectors,
+        selector_params, random_states, N_REPS, path_to_pfsresults,
+        score_func=SCORE
+    )
 
-    BASE_PATH = './../../data'
-    TARGET_SET = 'ct4_pet0_clinical.csv'
-
-    # Target variables.
-    y_pfs = target('./../../data/to_analysis/target_pfs.csv')
+    # LRC target data.
     y_lrc = target('./../../data/to_analysis/target_lrc.csv')
 
-    # Data set.
-    X = feature_set('./../../data/to_analysis/lbp/ct4_pet0_clinical.csv')
-    #X = feature_set('./../../data/to_analysis/lbp/ct4_pet1_clinical.csv')
+    path_to_lrcresults = './../../data/outputs/model_comparison_lbp/lrc/ct3_pet1_clinical.csv'
 
-    # Location to store results.
-    path_to_results = os.path.join(
-        BASE_PATH, 'outputs/model_comparison_pfs', TARGET_SET
+    # Hyperparameters classification algorithms. Note changing to LRC priors.
+    hparams = {
+        'lda': {
+            # NOTE: n_components determined in model selection work function.
+            'n_components': [None], 'tol': TOL, 'priors': [LRC_PRIORS],
+        },
+        'qda': {
+            'priors': [LRC_PRIORS], 'tol': TOL
+        },
+        'pls': {
+            'n_components': [None], 'tol': TOL,
+        },
+        'gnb': {
+            'priors': [LRC_PRIORS]
+        },
+        'logreg': {
+            'C': C, 'solver': ['sag'], 'penalty': PENALTY,
+            'class_weight': CLASS_WEIGHT, 'max_iter': MAX_ITER
+        },
+    }
+    results_lrc = model_comparison(
+        comparison_scheme, X, y_lrc, estimators, hparams, selectors,
+        selector_params, random_states, N_REPS, path_to_lrcresults,
+        score_func=SCORE
     )
-    

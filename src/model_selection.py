@@ -308,31 +308,32 @@ def _nested_point632plus(*args, n_jobs=None, score_func=None, **kwargs):
                 best_hparams, best_support = hparams, support
 
         # Best model.
-        model = _check_estimator(
-            np.size(best_support), best_hparams, estimator, random_state
+        best_model = _check_estimator(
+            np.size(best_support), best_hparams, estimator,
+            random_state=random_state
         )
-        train_errors, test_errors = scale_fit_predict632(
-            model, X_train[:, best_support], X_test[:, best_support], y_train,
-            y_test, score_func=score_func
+        train_error, test_error = utils.scale_fit_predict632(
+            best_model, X_train[:, best_support], X_test[:, best_support],
+            y_train, y_test, score_func=score_func
         )
-        train_errors.append(train_errors), test_errors.append(test_errors)
+        train_errors.append(train_error), test_errors.append(test_error)
         # Bookeeping of best feature subset and hparams in each fold.
         sel_features[best_support] += 1
-        opt_hparams.append(model.get_params())
+        opt_hparams.append(best_model.get_params())
 
     # NOTE: Selecting mode of hparams as opt hparam settings.
-    mode_hparams = max(opt_hparams, key=opt_hparams.count)
+    best_model_hparams = max(opt_hparams, key=opt_hparams.count)
 
     end_results = _update_prelim_results(
-        results, path_tempdir, random_state, estimator, selector, mode_hparams,
-        np.mean(test_errors), np.mean(train_errors),
+        results, path_tempdir, random_state, estimator, selector,
+        best_model_hparams, np.mean(test_errors), np.mean(train_errors),
         np.squeeze(np.where(sel_features >= THRESH))
     )
     return end_results
 
 
 def point632plus(*args, verbose=1, n_jobs=1, score_func=None):
-    """
+    """Perform a hyperparameter grid search with the .632+ bootstrap estimator.
 
     """
     (
@@ -425,24 +426,11 @@ def oob_resampling(*args, score_func=None, n_jobs=1, verbose=0):
         model = _check_estimator(
             np.size(support), hparams, estimator, random_state=random_state
         )
-        model.fit(X_train_sub, y_train)
-        # Aggregate model predictions.
-        y_test_pred = model.predict(X_test_sub)
-        y_train_pred = model.predict(X_train_sub)
-        test_score = score_func(y_test, y_test_pred)
-        train_score = score_func(y_train, y_train_pred)
-
-        # Compute train and test errors.
-        train_errors.append(
-            utils.point632p_score(
-                y_train, y_train_pred, train_score, test_score
-            )
+        train_error, test_error = utils.scale_fit_predict632(
+            model, X_train_sub, X_test_sub, y_train,
+            y_test, score_func=score_func
         )
-        test_errors.append(
-            utils.point632p_score(
-                y_test, y_test_pred, train_score, test_score
-            )
-        )
+        train_errors.append(train_error), test_errors.append(test_error)
         # Bookkeeping of features selected in each fold.
         features[support] += 1
 
