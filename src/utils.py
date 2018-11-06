@@ -203,7 +203,8 @@ def _omega(train_error, test_error, gamma):
 def _no_info_rate(y_true, y_pred):
 
     # NB: Only applicable to a dichotomous classification problem.
-    p_one, q_one = np.sum(y_true == 1), np.sum(y_pred == 1)
+    p_one = np.sum(y_true == 1) / np.size(y_true)
+    q_one = np.sum(y_pred == 1) / np.size(y_pred)
 
     return p_one * (1 - q_one) + (1 - p_one) * q_one
 
@@ -231,10 +232,10 @@ def scale_fit_predict632(*args, score_func=None, **kwargs):
     model.fit(X_train_std, y_train)
 
     # Aggregate model predictions.
-    y_test_pred = model.predict(X_test_std)
     y_train_pred = model.predict(X_train_std)
-    test_score = score_func(y_test, y_test_pred)
     train_score = score_func(y_train, y_train_pred)
+    y_test_pred = model.predict(X_test_std)
+    test_score = score_func(y_test, y_test_pred)
 
     # Compute train and test errors.
     train_errors = point632p_score(

@@ -233,12 +233,12 @@ def _feature_importance_permutation(X, y, model, score_func, num_rounds, seed):
 
     rgen = np.random.RandomState(seed)
 
-    mean_importance_vals = np.zeros(X.shape[1])
-
     baseline = score_func(y, model.predict(X))
 
+    _, nfeatures = np.shape(X)
+    avg_imp = np.zeros(nfeatures, dtype=float)
     for round_idx in range(num_rounds):
-        for col_idx in range(X.shape[1]):
+        for col_idx in range(nfeatures):
 
             save_col = X[:, col_idx].copy()
             rgen.shuffle(X[:, col_idx])
@@ -247,10 +247,8 @@ def _feature_importance_permutation(X, y, model, score_func, num_rounds, seed):
             X[:, col_idx] = save_col
             importance = baseline - new_score
             mean_importance_vals[col_idx] += importance
-
-        mean_importance_vals /= num_rounds
-
-    return mean_importance_vals
+    
+    return avg_imp /= num_rounds
 
 
 def permutation_importance(data, model=None, thresh=0, nreps=5):
