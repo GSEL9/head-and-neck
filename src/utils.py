@@ -31,80 +31,6 @@ def listdir(path_to_dir, skip_tail=('.csv'), skip_head=('.')):
     return labels
 
 
-def setup_logger(fname='extraction_log.txt'):
-    """Setup logger with info filter.
-
-    Args:
-        fname (str):
-
-    """
-
-    # Location of output log file
-    log_handler = logging.FileHandler(
-        filename=os.path.join(os.getcwd(), fname), mode='a'
-    )
-    log_handler.setLevel(logging.INFO)
-    log_handler.setFormatter(logging.Formatter(
-        '%(levelname)-.1s: (%(threadName)s) %(name)s: %(message)s')
-    )
-    pyrad_logger = radiomics.logger
-    pyrad_logger.addHandler(log_handler)
-
-    # Handler printing to the output.
-    outputhandler = pyrad_logger.handlers[0]
-    outputhandler.setFormatter(logging.Formatter(
-        '[%(asctime)-.19s] (%(threadName)s) %(name)s: %(message)s')
-    )
-    # Ensures that INFO messages are being passed to the filter
-    outputhandler.setLevel(logging.INFO)
-    outputhandler.addFilter(LoggingInfoFilter('radiomics.batch'))
-
-    logging.getLogger('radiomics.batch').debug('Logging init')
-
-    return None
-
-
-class LoggingInfoFilter(logging.Filter):
-    """A filter that allows messages from specified filter and level INFO and
-    up including level WARNING and up from other loggers.
-
-    Args:
-        name (str): Name of logger.
-
-    """
-
-    def __init__(self, name):
-
-        super(LoggingInfoFilter, self).__init__(name)
-        self.level = logging.WARNING
-
-    def filter(self, record):
-
-        if record.levelno >= self.level:
-            return True
-        elif record.name == self.name and record.levelno >= logging.INFO:
-            return True
-        else:
-            return False
-
-
-def multi_intersect(arrays):
-    """Determines the intersection between multiple sets.
-
-    Args:
-        arrays (iterable): A set of iterables.
-
-    Returns:
-        (list): Elements intersecting across all arrays.
-
-    """
-
-    sets = [set(array) for array in arrays]
-    matches = set.intersection(*sets)
-
-    return list(matches)
-
-
 def train_test_z_scores(X_train, X_test):
     """Compute Z-scores for training and test sets.
 
@@ -117,41 +43,12 @@ def train_test_z_scores(X_train, X_test):
 
     """
 
-    # NOTE: Avoid leakage by transforming test data with training params.
+    # NOTE: Avoid information leakage and make train/test sets comparable.
     scaler = StandardScaler()
     X_train_std = scaler.fit_transform(X_train)
     X_test_std = scaler.transform(X_test)
 
     return X_train_std, X_test_std
-
-
-def scale_fit_predict(*args, score_func=None, **kwargs):
-    """Convenience function to produce training and test scores from model
-    fitting.
-
-    Args:
-        model (sklearn.estimator): Learning model.
-        X_train (array-like): Training set.
-        X_test (array-like): Test set.
-        y_train (array-like): Target training set.
-        y_test (array-like): Target test set.
-
-    Returns:
-        (tuple): Traning and test scores.
-
-    """
-    model, X_train, X_test, y_train, y_test = args
-
-    # Compute Z scores.
-    X_train_std, X_test_std = train_test_z_scores(X_train, X_test)
-
-    model.fit(X_train_std, y_train)
-
-    # Aggregate model predictions with hparams combo and feature subset.
-    train_score = score_func(y_train, model.predict(X_train_std))
-    test_score = score_func(y_test, model.predict(X_test_std))
-
-    return train_score, test_score
 
 
 class BootstrapOutOfBag:
@@ -187,20 +84,24 @@ def check_support(support):
 
 
 @jit
-def _point632p_score(weight, train_error, test_error):
+def point632plus(train_score, test_score, r_marked, test_score_marked):
 
-    return (1 - weight) * train_error + weight * test_error
+    point632 = 0.368 * train_score + 0.632 * test_score
+    frac = (0.368 * 0.632 * r_marked) / (1 - 0.368 * r_marked)
+
+    return point632 + (test_score_marked - train_score) * frac
 
 
 @jit
-def _omega(train_error, test_error, gamma):
+def relative_overfit_rate(train_score, test_score, gamma):
 
-    rel_overfit_rate = (test_error - train_error) / (gamma - train_error)
+    if test_score > train_score and gamma > train_score:
+        return (test_score - train_score) / (gamma - train_score)
+    else:
+        return 0
 
-    return 0.632 / (1 - (0.368 * rel_overfit_rate))
 
-
-def _no_info_rate(y_true, y_pred):
+def no_info_rate(y_true, y_pred):
 
     # NB: Only applicable to a dichotomous classification problem.
     p_one = np.sum(y_true == 1) / np.size(y_true)
@@ -209,17 +110,18 @@ def _no_info_rate(y_true, y_pred):
     return p_one * (1 - q_one) + (1 - p_one) * q_one
 
 
-def point632p_score(y_true, y_pred, train_score, test_score):
+def point632plus_score(y_true, y_pred, train_score, test_score):
 
-    train_error, test_error = 1.0 - train_score, 1.0 - test_score
+    # To account for gamma <= train_score/train_score < gamma <= test_score
+    # in which case R can fall outside of [0, 1].
+    test_score_marked = min(test_score, no_info_rate(y_true, y_pred))
 
-    # Compute .632+ train score.
-    weight = _omega(
-        train_error, test_error, _no_info_rate(y_true, y_pred)
+    # Adjusted R.
+    r_marked = relative_overfit_rate(
+        train_score, test_score, no_info_rate(y_true, y_pred)
     )
-    score = _point632p_score(weight, train_error, test_error)
-
-    return score
+    # Compute .632+ train score.
+    return point632plus(train_score, test_score, r_marked, test_score_marked)
 
 
 def scale_fit_predict632(*args, score_func=None, **kwargs):
@@ -234,14 +136,15 @@ def scale_fit_predict632(*args, score_func=None, **kwargs):
     # Aggregate model predictions.
     y_train_pred = model.predict(X_train_std)
     train_score = score_func(y_train, y_train_pred)
+
     y_test_pred = model.predict(X_test_std)
     test_score = score_func(y_test, y_test_pred)
 
-    # Compute train and test errors.
-    train_errors = point632p_score(
+    # Compute train and test .632+ scores.
+    train_632_score = point632plus_score(
         y_train, y_train_pred, train_score, test_score
     )
-    test_errors = point632p_score(
+    test_632_score = point632plus_score(
         y_test, y_test_pred, train_score, test_score
     )
-    return train_errors, test_errors
+    return train_632_score, test_632_score

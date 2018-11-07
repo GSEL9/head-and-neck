@@ -44,6 +44,14 @@ threading.current_thread().name = 'Main'
 TMP_EXTRACTION_DIR = 'tmp_feature_extraction'
 
 
+def _check_is_file(path_to_file):
+
+    if os.path.isfile(path_to_file):
+        return
+    else:
+        raise ValueError('Not recognized as file: {}'.format(path_to_file))
+
+
 def feature_extraction(param_file, samples, verbose=0, n_jobs=None, **kwargs):
     """Extract features from PyRadimoics compatible images. Preliminary results
     are stored for re-entering the process in case of abortion.
@@ -64,8 +72,7 @@ def feature_extraction(param_file, samples, verbose=0, n_jobs=None, **kwargs):
 
     global TMP_EXTRACTION_DIR
 
-    if not os.path.isfile(param_file):
-        raise ValueError('Invalid path param file: {}'.format(param_file))
+    _check_is_file(param_file)
 
     threading.current_thread().name = 'Main'
 
@@ -85,6 +92,9 @@ def feature_extraction(param_file, samples, verbose=0, n_jobs=None, **kwargs):
             param_file, sample, path_tempdir, verbose=verbose
         ) for sample in samples
     )
+    # Write extracted features to disk.
+    ioutil.write_final_results(kwargs['path_to_results'], results)
+
     # Clean up temporary directory when process complete.
     ioutil.teardown_tempdir(TMP_EXTRACTION_DIR)
 
@@ -148,78 +158,27 @@ def _extract_features(param_file, case, path_tempdir, verbose=0):
 
 if __name__ == '__main__':
 
-    path_ct_dir = './../../data/images/ct_cropped/'
-    path_pet_dir = './../../data/images/pet_cropped/'
-    path_masks_dir = './../../data/images/masks_cropped/'
+    ct_param_file = './../../data/fallback/extraction_settings/fallback_ct.yaml'
+    pet_param_file = './../../data/fallback/extraction_settings/fallback_pet.yaml'
 
-    base_path = './../../data/extraction_settings/discr/'
+    path_ct_features = './../../data/fallback/image_features/ct_features.csv'
+    path_pet_features = './../../data/fallback/image_features/pet_features.csv'
 
-    ct_fnames = [
-        'ct_extract_set_discr1.yaml',
-        'ct_extract_set_discr2.yaml',
-        'ct_extract_set_discr3.yaml',
-        'ct_extract_set_discr4.yaml',
-        'ct_extract_set_discr5.yaml'
-    ]
-    pet_fnames = [
-        'pet_extract_set_discr1.yaml',
-        'pet_extract_set_discr2.yaml',
-        'pet_extract_set_discr3.yaml',
-        'pet_extract_set_discr4.yaml',
-        'pet_extract_set_discr5.yaml'
-    ]
-    ct_param_files = [
-        os.path.join(base_path, ct_fname) for ct_fname in ct_fnames
-    ]
-    pet_param_files = [
-        os.path.join(base_path, pet_fname) for pet_fname in pet_fnames
-    ]
-    path_raw_ct_features = [
-        './../../data/outputs/ct_features/raw_ct_features1.csv',
-        './../../data/outputs/ct_features/raw_ct_features2.csv',
-        './../../data/outputs/ct_features/raw_ct_features3.csv',
-        './../../data/outputs/ct_features/raw_ct_features4.csv',
-        './../../data/outputs/ct_features/raw_ct_features5.csv',
-    ]
-    path_raw_pet_features = [
-        './../../data/outputs/pet_features/raw_pet_features1.csv',
-        './../../data/outputs/pet_features/raw_pet_features2.csv',
-        './../../data/outputs/pet_features/raw_pet_features3.csv',
-        './../../data/outputs/pet_features/raw_pet_features4.csv',
-        './../../data/outputs/pet_features/raw_pet_features5.csv',
-    ]
+    path_ct_imagedir = './../../data/images/ct_cropped/'
+    path_pet_imagedir = './../../data/images/pet_cropped/'
+    path_masksdir = './../../data/images/masks_cropped/'
 
-    sitk.ProcessObject_SetGlobalDefaultNumberOfThreads(1)
-
-    paths_ct_samples = ioutil.sample_paths(
-        path_ct_dir, path_masks_dir, target_format='nrrd'
+    paths_ct_images = ioutil.sample_paths(
+        path_ct_imagedir, path_masksdir, target_format='nrrd'
     )
-    paths_pet_samples = ioutil.sample_paths(
-        path_pet_dir, path_masks_dir, target_format='nrrd'
+    paths_pet_images = ioutil.sample_paths(
+        path_pet_imagedir, path_masksdir, target_format='nrrd'
     )
-
-    utils.setup_logger()
-
-    for num, pet_param_file in enumerate(pet_param_files):
-
-        #utils.setup_logger(unique_fname)
-
-        print('Run: {}\nParam file: {}'.format(num+1, pet_param_file))
-
-        start_time = datetime.now()
-        raw_pet_outputs = feature_extraction(pet_param_file, paths_pet_samples)
-        print('Features extracted in: {}'.format(datetime.now() - start_time))
-
-        ioutil.write_final_results(path_raw_pet_features[num], raw_pet_outputs)
-
-    for num, ct_param_file in enumerate(ct_param_files):
-
-        #utils.setup_logger(unique_fname)
-
-        print('Run: {}\nParam file: {}'.format(num+1, ct_param_file))
-
-        start_time = datetime.now()
-        raw_ct_outputs = feature_extraction(ct_param_file, paths_ct_samples)
-        print('Features extracted in: {}'.format(datetime.now() - start_time))
-
-        ioutil.write_final_results(path_raw_ct_features[num], raw_ct_outputs)
+    ct_features = feature_extraction(
+        ct_param_file, paths_ct_images, path_to_results=path_ct_features,
+        verbose=1
+    )
+    pet_features = feature_extraction(
+        pet_param_file, paths_pet_images, path_to_results=path_pet_features,
+        verbose=1
+    )
