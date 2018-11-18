@@ -89,8 +89,3 @@ def model_comparison(*args, verbose=1, score_func=None, n_jobs=None, **kwargs):
     results = _cleanup(results, path_to_results)
 
     return results
-
-
-if __name__ == '__main__':
-
-    pass
