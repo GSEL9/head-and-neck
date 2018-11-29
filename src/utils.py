@@ -101,6 +101,7 @@ def relative_overfit_rate(train_score, test_score, gamma):
         return 0
 
 
+# NOTE: Need only use sum(y_) if y_ is binary.
 def no_info_rate(y_true, y_pred):
 
     # NB: Only applicable to a dichotomous classification problem.
