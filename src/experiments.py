@@ -1,16 +1,3 @@
-# -*- coding: utf-8 -*-
-#
-# model_comparison_experi.py
-#
-
-"""
-Setup model comparison experiments.
-"""
-
-__author__ = 'Severin Langberg'
-__email__ = 'langberg91@gmail.com'
-
-
 import numpy as np
 import pandas as pd
 
@@ -60,6 +47,15 @@ if __name__ == '__main__':
     from sklearn.ensemble import AdaBoostClassifier
     from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
     from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
+
+
+    X = feature_set('./../../data/clinical_experiment/data_to_analysis/clinical_vars.csv')
+
+    y_pfs = target('./../../data/clinical_experiment/data_to_analysis/target_pfs.csv')
+    y_lrc = target('./../../data/clinical_experiment/data_to_analysis/target_lrc.csv')
+
+    path_pfs_results = './../../data/clinical_experiment/results/clin_results_lrc.csv'
+    path_pfs_results = './../../data/clinical_experiment/results/clin_results_dfs.csv'
 
     # Setup: number of target features, random seed, number of OOB splits.
     K, SEED, N_REPS = 15, 0, 10
@@ -127,14 +123,6 @@ if __name__ == '__main__':
         'qda': QuadraticDiscriminantAnalysis,
     }
 
-    # Feature data.
-    X = feature_set('./../../data/clinical_experiment/clinical_vars.csv')
-
-    """
-    # PFS target.
-    y_pfs = target('./../../data/to_analysis/target_pfs.csv')
-    path_to_pfsresults = './../../data/fallback/results/results_pfs.csv'
-
     pfs_hparams = {
         'adaboost': {
             'n_estimators': N_ESTIMATORS, 'learning_rate': LEARNINGR_RATE
@@ -158,42 +146,8 @@ if __name__ == '__main__':
             'class_weight': CLASS_WEIGHT, 'max_iter': MAX_ITER
         },
     }
-    #results_pfs = model_comparison(
-    #    comparison_scheme, X, y_pfs, estimators, pfs_hparams, selectors,
-    #    selector_params, random_states, N_REPS, path_to_pfsresults,
-    #    score_func=SCORE
-    #)
-
-    # LRC target.
-    y_lrc = target('./../../data/to_analysis/target_lrc.csv')
-    path_to_lrcresults = './../../data/fallback/results/results_lrc.csv'
-
-    lrc_hparams = {
-        'adaboost': {
-            'n_estimators': N_ESTIMATORS, 'learning_rate': LEARNINGR_RATE
-        },
-        'lda': {
-            # NOTE: n_components determined in model selection work function.
-            'n_components': [None], 'tol': TOL, 'priors': [LRC_PRIORS],
-            'solver': SOLVER
-        },
-        'qda': {
-            'priors': [LRC_PRIORS], 'tol': TOL
-        },
-        'pls': {
-            'n_components': [None], 'tol': TOL,
-        },
-        'gnb': {
-            'priors': [LRC_PRIORS]
-        },
-        'logreg': {
-            'C': C, 'solver': ['sag'], 'penalty': PENALTY,
-            'class_weight': CLASS_WEIGHT, 'max_iter': MAX_ITER
-        },
-    }
-    results_lrc = model_comparison(
-        comparison_scheme, X, y_lrc, estimators, lrc_hparams, selectors,
-        selector_params, random_states, N_REPS, path_to_lrcresults,
+    model_comparison(
+        comparison_scheme, X, y_pfs, estimators, pfs_hparams, selectors,
+        selector_params, random_states, N_REPS, path_pfs_results,
         score_func=SCORE
     )
-    """
