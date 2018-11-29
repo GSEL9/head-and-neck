@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# model_comparison_experi.py
+# model_comparison_setup.py
 #
 
 """
@@ -43,12 +43,6 @@ def feature_set(path_to_data, index_col=0):
 
 
 if __name__ == '__main__':
-
-    """TODO: Compute same results with LBP and other PET/CT discretization
-    levels to see if improved score.
-
-
-    """
 
     import os
     import feature_selection
