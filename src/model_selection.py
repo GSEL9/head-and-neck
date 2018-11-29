@@ -36,6 +36,7 @@ def _check_estimator(nfeatures, hparams, estimator, random_state):
             hparams['n_components'] = 1
         else:
             hparams['n_components'] = nfeatures - 1
+
     # If stochastic algorithms.
     try:
         model = estimator(**hparams, random_state=random_state)
