@@ -113,14 +113,14 @@ def no_info_rate(y_true, y_pred):
 
 def point632plus_score(y_true, y_pred, train_score, test_score):
 
+    gamma = no_info_rate(y_true, y_pred)
     # To account for gamma <= train_score/train_score < gamma <= test_score
     # in which case R can fall outside of [0, 1].
-    test_score_marked = min(test_score, no_info_rate(y_true, y_pred))
+    test_score_marked = min(test_score, gamma)
 
     # Adjusted R.
-    r_marked = relative_overfit_rate(
-        train_score, test_score, no_info_rate(y_true, y_pred)
-    )
+    r_marked = relative_overfit_rate(train_score, test_score, gamma)
+
     # Compute .632+ train score.
     return point632plus(train_score, test_score, r_marked, test_score_marked)
 
