@@ -149,7 +149,7 @@ def permutation_importance(data, model=None, thresh=0, nreps=5):
 
     model.fit(X_train_std, y_train)
 
-    imp  = _feature_importance_permutation(
+    imp, _  = _feature_importance_permutation(
         model=model, X=X_test_std, y=y_test, score_func=METRIC, seed=SEED,
         num_rounds=nreps
     )
